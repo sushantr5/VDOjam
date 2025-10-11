@@ -393,6 +393,10 @@ async function handleApi(req, res, url) {
     const userId = generateId('usr');
     const authToken = generateId('tok');
     const joinedAt = new Date().toISOString();
+
+    party.users = party.users || {};
+    party.tokens = party.tokens || {};
+
     party.users[userId] = {
       id: userId,
       name: displayName,
