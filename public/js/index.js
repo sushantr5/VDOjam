@@ -58,13 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
         partyName: result.party.name,
         updatedAt: Date.now()
       });
-      const qrLink = `${result.party.joinUrl}`;
-      const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrLink)}`;
-      showResult(
-        createResult,
-        `Party created! Share <a href="${qrLink}">${qrLink}</a> or show this QR code:<br><img src="${qrImage}" alt="QR code to join" loading="lazy" /><br>Access code for the player: <strong>${result.party.accessCode}</strong>`
-      );
-      renderRecentParties();
+      const partyUrl = `/party.html?partyId=${encodeURIComponent(result.party.id)}`;
+      window.location.href = partyUrl;
+      return;
     } catch (error) {
       console.error(error);
       showResult(createResult, error.message, false);

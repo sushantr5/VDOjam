@@ -23,12 +23,15 @@ const elements = {
   videoForm: document.getElementById('video-form'),
   adminControls: document.getElementById('admin-controls'),
   openPlayer: document.getElementById('open-player'),
+  endParty: document.getElementById('end-party'),
   sessionDetails: document.getElementById('session-details'),
   logout: document.getElementById('logout'),
   overlay: document.getElementById('join-overlay'),
+  overlayTitle: document.querySelector('#join-overlay h2'),
   overlayForm: document.getElementById('overlay-form'),
   overlayCancel: document.getElementById('overlay-cancel'),
   overlayPartyName: document.getElementById('overlay-party-name'),
+  partyStatus: document.getElementById('party-status'),
   trackTemplate: document.getElementById('track-template')
 };
 
@@ -47,6 +50,45 @@ function setOverlay(visible) {
   elements.overlay.hidden = !visible;
 }
 
+function updateOverlayContent() {
+  if (!state.party) return;
+  if (state.party.endedAt) {
+    if (elements.overlayTitle) {
+      elements.overlayTitle.textContent = 'Party ended';
+    }
+    elements.overlayPartyName.textContent = `“${state.party.name}” has wrapped up. Thanks for jamming!`;
+    elements.overlayForm.hidden = true;
+    elements.overlayCancel.textContent = 'Return home';
+  } else {
+    if (elements.overlayTitle) {
+      elements.overlayTitle.textContent = 'Join this party';
+    }
+    elements.overlayPartyName.textContent = `Join "${state.party.name}" with a display name.`;
+    elements.overlayForm.hidden = false;
+    elements.overlayCancel.textContent = 'Return home';
+  }
+}
+
+function renderPartyStatus() {
+  if (!elements.partyStatus) return;
+  if (!state.party) {
+    elements.partyStatus.hidden = true;
+    elements.partyStatus.removeAttribute('data-state');
+    elements.partyStatus.textContent = '';
+    return;
+  }
+  if (state.party.endedAt) {
+    const ended = new Date(state.party.endedAt).toLocaleString();
+    elements.partyStatus.hidden = false;
+    elements.partyStatus.dataset.state = 'ended';
+    elements.partyStatus.innerHTML = `<strong>Party ended</strong><p class="muted">This party wrapped at ${ended}. You can review the final queue below.</p>`;
+  } else {
+    elements.partyStatus.hidden = true;
+    elements.partyStatus.removeAttribute('data-state');
+    elements.partyStatus.textContent = '';
+  }
+}
+
 function ensureRefreshTimer() {
   if (refreshTimer) {
     clearTimeout(refreshTimer);
@@ -57,10 +99,16 @@ function ensureRefreshTimer() {
 function renderSessionDetails() {
   if (!state.user) {
     elements.sessionDetails.hidden = true;
+    if (elements.logout) {
+      elements.logout.hidden = true;
+    }
     return;
   }
   elements.sessionDetails.hidden = false;
   elements.sessionDetails.innerHTML = `Logged in as <strong>${state.user.name}</strong> (${state.user.role})`;
+  if (elements.logout) {
+    elements.logout.hidden = false;
+  }
 }
 
 function renderPartyInfo() {
@@ -75,15 +123,20 @@ function renderPartyInfo() {
     elements.accessCode.hidden = false;
     elements.adminControls.hidden = false;
     elements.openPlayer.href = `/player.html?partyId=${encodeURIComponent(partyId)}&accessCode=${encodeURIComponent(state.party.accessCode)}`;
+    if (elements.endParty) {
+      elements.endParty.disabled = !!state.party.endedAt;
+      elements.endParty.textContent = state.party.endedAt ? 'Party ended' : 'End party';
+    }
   } else {
     elements.accessCode.hidden = true;
     elements.adminControls.hidden = true;
   }
-  elements.overlayPartyName.textContent = `Join "${state.party.name}" with a display name.`;
+  updateOverlayContent();
+  renderPartyStatus();
 }
 
 function renderComposer() {
-  if (!state.user) {
+  if (!state.user || state.party?.endedAt) {
     elements.composer.hidden = true;
     return;
   }
@@ -102,12 +155,21 @@ function formatSubmittedText(track) {
 
 function renderQueue() {
   elements.queueList.innerHTML = '';
+  const partyEnded = !!state.party?.endedAt;
   if (!state.submissions.length) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = 'No songs in the queue yet. Paste a YouTube link to start the party!';
+    empty.textContent = partyEnded
+      ? 'This party has ended and the queue is now closed.'
+      : 'No songs in the queue yet. Paste a YouTube link to start the party!';
     elements.queueList.appendChild(empty);
     return;
+  }
+  if (partyEnded) {
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = 'This party has ended. Here is the final playlist for reference:';
+    elements.queueList.appendChild(note);
   }
   state.submissions.forEach((track) => {
     const node = elements.trackTemplate.content.firstElementChild.cloneNode(true);
@@ -126,6 +188,11 @@ function renderQueue() {
       node.querySelector('header').appendChild(badge);
     }
     node.querySelectorAll('.vote').forEach((voteBtn) => {
+      if (partyEnded) {
+        voteBtn.dataset.disabled = 'true';
+        voteBtn.removeAttribute('data-state');
+        return;
+      }
       const value = Number(voteBtn.dataset.vote);
       if (track.viewerVote === value) {
         voteBtn.dataset.state = 'active';
@@ -136,22 +203,24 @@ function renderQueue() {
     });
 
     const buttons = node.querySelector('.track-buttons');
-    if (state.user?.role === 'admin') {
-      const promote = document.createElement('button');
-      promote.textContent = 'Play next';
-      promote.addEventListener('click', () => promoteTrack(track.id));
-      buttons.appendChild(promote);
-      const markPlayed = document.createElement('button');
-      markPlayed.textContent = 'Mark played';
-      markPlayed.addEventListener('click', () => markPlayedTrack(track.id));
-      buttons.appendChild(markPlayed);
-    }
-    if (state.user && (state.user.role === 'admin' || state.user.id === track.submittedById)) {
-      const remove = document.createElement('button');
-      remove.textContent = 'Remove';
-      remove.classList.add('danger');
-      remove.addEventListener('click', () => removeTrack(track.id));
-      buttons.appendChild(remove);
+    if (!partyEnded) {
+      if (state.user?.role === 'admin') {
+        const promote = document.createElement('button');
+        promote.textContent = 'Play next';
+        promote.addEventListener('click', () => promoteTrack(track.id));
+        buttons.appendChild(promote);
+        const markPlayed = document.createElement('button');
+        markPlayed.textContent = 'Mark played';
+        markPlayed.addEventListener('click', () => markPlayedTrack(track.id));
+        buttons.appendChild(markPlayed);
+      }
+      if (state.user && (state.user.role === 'admin' || state.user.id === track.submittedById)) {
+        const remove = document.createElement('button');
+        remove.textContent = 'Remove';
+        remove.classList.add('danger');
+        remove.addEventListener('click', () => removeTrack(track.id));
+        buttons.appendChild(remove);
+      }
     }
 
     elements.queueList.appendChild(node);
@@ -190,7 +259,14 @@ async function refreshState() {
     } else {
       setOverlay(false);
     }
-    ensureRefreshTimer();
+    if (state.party?.endedAt) {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+    } else {
+      ensureRefreshTimer();
+    }
   } catch (error) {
     console.error('Failed to refresh state', error);
     if (error.status === 401 || error.status === 403) {
@@ -262,6 +338,33 @@ async function markPlayedTrack(trackId) {
   }
 }
 
+async function endCurrentParty() {
+  if (!state.token || !state.user || state.user.role !== 'admin') return;
+  if (state.party?.endedAt) return;
+  if (!confirm('End this party? Guests will no longer be able to join and the queue will be locked.')) return;
+  if (elements.endParty) {
+    elements.endParty.disabled = true;
+  }
+  try {
+    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/end`, {
+      method: 'POST',
+      token: state.token
+    });
+    if (session) {
+      deleteSession(partyId);
+      session = null;
+    }
+    state.token = null;
+    window.location.href = '/';
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+    if (elements.endParty) {
+      elements.endParty.disabled = false;
+    }
+  }
+}
+
 elements.videoForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!state.token) {
@@ -286,6 +389,10 @@ elements.videoForm?.addEventListener('submit', async (event) => {
   }
 });
 
+elements.endParty?.addEventListener('click', () => {
+  endCurrentParty();
+});
+
 elements.logout?.addEventListener('click', () => {
   if (session) {
     deleteSession(partyId);
@@ -295,6 +402,10 @@ elements.logout?.addEventListener('click', () => {
 
 elements.overlayForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
+  if (state.party?.endedAt) {
+    alert('This party has already ended.');
+    return;
+  }
   const value = elements.overlayForm.displayName.value.trim();
   if (!value) return;
   elements.overlayForm.querySelector('button').disabled = true;
