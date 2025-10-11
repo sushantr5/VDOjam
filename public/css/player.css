@@ -68,6 +68,11 @@ button.link {
   cursor: pointer;
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 button.primary {
   background: linear-gradient(125deg, var(--accent), #0ea5e9);
   color: white;
@@ -108,7 +113,13 @@ button.link {
 .track-info .controls {
   margin-top: 1rem;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
+  align-items: center;
+}
+
+.track-info .controls button.link {
+  margin-left: auto;
 }
 
 .upcoming ol,

@@ -153,6 +153,11 @@ button.secondary {
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .content {
   padding: 2.5rem 3rem;
   display: grid;
@@ -207,7 +212,14 @@ button.secondary {
   gap: 1rem;
 }
 
-.admin-controls a {
+.admin-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.admin-controls a,
+.admin-controls button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -217,6 +229,14 @@ button.secondary {
   color: var(--text);
   text-decoration: none;
   font-size: 0.9rem;
+  background: rgba(15, 23, 42, 0.65);
+  cursor: pointer;
+}
+
+.admin-controls button.danger {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
 }
 
 .queue-list {
@@ -302,6 +322,12 @@ button.secondary {
   transform: translateY(-1px);
 }
 
+.vote[data-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 .score {
   font-weight: 600;
   font-size: 1.1rem;
@@ -331,6 +357,27 @@ button.secondary {
   background: rgba(15, 23, 42, 0.65);
   color: var(--text);
   border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.party-status {
+  display: grid;
+  gap: 0.5rem;
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.92);
+  font-size: 0.95rem;
+}
+
+.party-status[data-state='ended'] {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
+.party-status[data-state='active'] {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent);
 }
 
 .track-buttons button.danger {

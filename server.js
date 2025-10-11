@@ -226,6 +226,26 @@ function sortQueue(submissions) {
   });
 }
 
+function isPartyEnded(party) {
+  return !!party.endedAt;
+}
+
+function finalizeParty(party, endedAt = new Date().toISOString()) {
+  party.endedAt = endedAt;
+  party.history = party.history || [];
+  const knownHistory = new Set(party.history);
+  for (const submission of party.submissions || []) {
+    if (!submission.played) {
+      submission.played = true;
+      submission.playedAt = endedAt;
+    }
+    if (!knownHistory.has(submission.id)) {
+      party.history.push(submission.id);
+      knownHistory.add(submission.id);
+    }
+  }
+}
+
 async function authenticate(req, party) {
   const token = extractAuthToken(req);
   if (!token) return null;
@@ -266,6 +286,7 @@ async function handleApi(req, res, url) {
       name: partyName,
       accessCode,
       createdAt,
+      endedAt: null,
       users: {
         [userId]: {
           id: userId,
@@ -334,7 +355,8 @@ async function handleApi(req, res, url) {
         id: party.id,
         name: party.name,
         createdAt: party.createdAt,
-        joinUrl: `${getBaseUrl(req)}/party.html?partyId=${party.id}`
+        joinUrl: `${getBaseUrl(req)}/party.html?partyId=${party.id}`,
+        endedAt: party.endedAt || null
       },
       submissions,
       nowPlaying: submissions.find(item => !item.played) || null,
@@ -357,6 +379,10 @@ async function handleApi(req, res, url) {
       body = await parseBody(req);
     } catch (error) {
       sendJson(res, 400, { error: error.message });
+      return;
+    }
+    if (isPartyEnded(party)) {
+      sendJson(res, 410, { error: 'This party has already ended.' });
       return;
     }
     const displayName = (body.displayName || '').trim();
@@ -418,6 +444,10 @@ async function handleApi(req, res, url) {
       sendJson(res, 401, { error: 'Authentication required.' });
       return;
     }
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
+      return;
+    }
     let body;
     try {
       body = await parseBody(req);
@@ -470,6 +500,11 @@ async function handleApi(req, res, url) {
     const submission = (party.submissions || []).find(item => item.id === submissionId);
     if (!submission) {
       sendJson(res, 404, { error: 'Track not found.' });
+      return;
+    }
+
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
       return;
     }
 
@@ -555,6 +590,21 @@ async function handleApi(req, res, url) {
     }
   }
 
+  if (restPath === '/end' && req.method === 'POST') {
+    if (!viewer || viewer.role !== 'admin') {
+      sendJson(res, 403, { error: 'Admin privileges required.' });
+      return;
+    }
+    if (!isPartyEnded(party)) {
+      finalizeParty(party);
+      await saveDb(db);
+    }
+    sendJson(res, 200, {
+      party: { id: party.id, name: party.name, endedAt: party.endedAt }
+    });
+    return;
+  }
+
   if (restPath === '/player/state' && req.method === 'POST') {
     let body;
     try {
@@ -570,12 +620,18 @@ async function handleApi(req, res, url) {
     }
     const queue = sortQueue(party.submissions || []);
     const submissions = queue.map(item => summarizeSubmission(item));
-    sendJson(res, 200, {
-      party: { id: party.id, name: party.name },
+    const response = {
+      party: { id: party.id, name: party.name, endedAt: party.endedAt || null },
       nowPlaying: submissions.find(item => !item.played) || null,
       upcoming: submissions.filter(item => !item.played).slice(1),
-      history: submissions.filter(item => item.played)
-    });
+      history: submissions.filter(item => item.played),
+      canGoPrevious: !isPartyEnded(party) && (party.history || []).length > 0
+    };
+    if (isPartyEnded(party)) {
+      response.nowPlaying = null;
+      response.upcoming = [];
+    }
+    sendJson(res, 200, response);
     return;
   }
 
@@ -591,6 +647,10 @@ async function handleApi(req, res, url) {
     const submissionId = body.submissionId;
     if (accessCode !== party.accessCode) {
       sendJson(res, 403, { error: 'Invalid access code.' });
+      return;
+    }
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
       return;
     }
     const submission = (party.submissions || []).find(item => item.id === submissionId);
@@ -609,6 +669,42 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (restPath === '/player/previous' && req.method === 'POST') {
+    let body;
+    try {
+      body = await parseBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+      return;
+    }
+    const accessCode = (body.accessCode || '').trim();
+    if (accessCode !== party.accessCode) {
+      sendJson(res, 403, { error: 'Invalid access code.' });
+      return;
+    }
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
+      return;
+    }
+    party.history = party.history || [];
+    const previousId = party.history.pop();
+    if (!previousId) {
+      sendJson(res, 404, { error: 'No previous track to play.' });
+      return;
+    }
+    const submission = (party.submissions || []).find(item => item.id === previousId);
+    if (!submission) {
+      sendJson(res, 404, { error: 'Track not found.' });
+      return;
+    }
+    submission.played = false;
+    submission.playedAt = null;
+    submission.priority = Date.now();
+    await saveDb(db);
+    sendJson(res, 200, { submission: summarizeSubmission(submission) });
+    return;
+  }
+
   if (restPath === '/player/reset' && req.method === 'POST') {
     let body;
     try {
@@ -621,10 +717,15 @@ async function handleApi(req, res, url) {
       sendJson(res, 403, { error: 'Invalid access code.' });
       return;
     }
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
+      return;
+    }
     for (const submission of party.submissions || []) {
       submission.played = false;
       submission.priority = 0;
     }
+    party.history = [];
     await saveDb(db);
     sendJson(res, 200, { success: true });
     return;
