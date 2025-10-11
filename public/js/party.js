@@ -32,6 +32,13 @@ const elements = {
   overlayCancel: document.getElementById('overlay-cancel'),
   overlayPartyName: document.getElementById('overlay-party-name'),
   partyStatus: document.getElementById('party-status'),
+  nowPlayingCard: document.getElementById('now-playing'),
+  nowPlayingTrack: document.getElementById('now-playing-track'),
+  nowPlayingThumb: document.getElementById('now-playing-thumb'),
+  nowPlayingTitle: document.getElementById('now-playing-title'),
+  nowPlayingMeta: document.getElementById('now-playing-meta'),
+  nowPlayingSubmitted: document.getElementById('now-playing-submitted'),
+  nowPlayingEmpty: document.getElementById('now-playing-empty'),
   trackTemplate: document.getElementById('track-template')
 };
 
@@ -43,7 +50,8 @@ let state = {
   party: null,
   submissions: [],
   remainingUploads: null,
-  nowPlaying: null
+  nowPlaying: null,
+  history: []
 };
 
 function setOverlay(visible) {
@@ -81,12 +89,42 @@ function renderPartyStatus() {
     const ended = new Date(state.party.endedAt).toLocaleString();
     elements.partyStatus.hidden = false;
     elements.partyStatus.dataset.state = 'ended';
-    elements.partyStatus.innerHTML = `<strong>Party ended</strong><p class="muted">This party wrapped at ${ended}. You can review the final queue below.</p>`;
+    elements.partyStatus.innerHTML = `<strong>Party ended</strong><p class="muted">This party wrapped at ${ended}. Thanks for jamming with us!</p>`;
   } else {
     elements.partyStatus.hidden = true;
     elements.partyStatus.removeAttribute('data-state');
     elements.partyStatus.textContent = '';
   }
+}
+
+function renderNowPlaying() {
+  if (!elements.nowPlayingCard) return;
+  if (!state.party || state.party.endedAt) {
+    elements.nowPlayingCard.hidden = true;
+    return;
+  }
+  elements.nowPlayingCard.hidden = false;
+  if (!state.nowPlaying) {
+    elements.nowPlayingTrack.hidden = true;
+    elements.nowPlayingEmpty.hidden = false;
+    if (state.submissions.length) {
+      elements.nowPlayingEmpty.textContent = 'Waiting for the next track to begin.';
+    } else {
+      elements.nowPlayingEmpty.textContent = 'Queue is waiting for its first track.';
+    }
+    elements.nowPlayingThumb?.removeAttribute('src');
+    elements.nowPlayingTitle.textContent = '';
+    elements.nowPlayingMeta.textContent = '';
+    elements.nowPlayingSubmitted.textContent = '';
+    return;
+  }
+  elements.nowPlayingTrack.hidden = false;
+  elements.nowPlayingEmpty.hidden = true;
+  elements.nowPlayingThumb.src = state.nowPlaying.thumbnail;
+  elements.nowPlayingThumb.alt = `Thumbnail for ${state.nowPlaying.title}`;
+  elements.nowPlayingTitle.textContent = state.nowPlaying.title;
+  elements.nowPlayingMeta.textContent = `by ${state.nowPlaying.channel}`;
+  elements.nowPlayingSubmitted.textContent = formatSubmittedText(state.nowPlaying);
 }
 
 function ensureRefreshTimer() {
@@ -156,22 +194,21 @@ function formatSubmittedText(track) {
 function renderQueue() {
   elements.queueList.innerHTML = '';
   const partyEnded = !!state.party?.endedAt;
-  if (!state.submissions.length) {
+  const upcoming = state.submissions;
+  if (!upcoming.length) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = partyEnded
-      ? 'This party has ended and the queue is now closed.'
-      : 'No songs in the queue yet. Paste a YouTube link to start the party!';
+    if (partyEnded) {
+      empty.textContent = 'This party has ended and the queue is now closed.';
+    } else if (state.nowPlaying) {
+      empty.textContent = 'No songs queued after this one. Add more tracks to keep the party going!';
+    } else {
+      empty.textContent = 'No songs in the queue yet. Paste a YouTube link to start the party!';
+    }
     elements.queueList.appendChild(empty);
     return;
   }
-  if (partyEnded) {
-    const note = document.createElement('p');
-    note.className = 'muted';
-    note.textContent = 'This party has ended. Here is the final playlist for reference:';
-    elements.queueList.appendChild(note);
-  }
-  state.submissions.forEach((track) => {
+  upcoming.forEach((track) => {
     const node = elements.trackTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector('.thumb').src = track.thumbnail;
     node.querySelector('.title').textContent = track.title;
@@ -188,18 +225,23 @@ function renderQueue() {
       node.querySelector('header').appendChild(badge);
     }
     node.querySelectorAll('.vote').forEach((voteBtn) => {
-      if (partyEnded) {
+      const value = Number(voteBtn.dataset.vote);
+      const votingDisabled = partyEnded || (state.nowPlaying && state.nowPlaying.id === track.id && !track.played);
+      if (votingDisabled) {
         voteBtn.dataset.disabled = 'true';
         voteBtn.removeAttribute('data-state');
-        return;
-      }
-      const value = Number(voteBtn.dataset.vote);
-      if (track.viewerVote === value) {
-        voteBtn.dataset.state = 'active';
       } else {
-        voteBtn.removeAttribute('data-state');
+        delete voteBtn.dataset.disabled;
+        if (track.viewerVote === value) {
+          voteBtn.dataset.state = 'active';
+        } else {
+          voteBtn.removeAttribute('data-state');
+        }
       }
-      voteBtn.addEventListener('click', () => handleVote(track.id, value === track.viewerVote ? 0 : value));
+      voteBtn.addEventListener('click', () => {
+        if (votingDisabled) return;
+        handleVote(track.id, value === track.viewerVote ? 0 : value);
+      });
     });
 
     const buttons = node.querySelector('.track-buttons');
@@ -238,7 +280,8 @@ async function refreshState() {
       user: data.user || state.user,
       submissions: data.submissions,
       remainingUploads: data.remainingUploads ?? state.remainingUploads,
-      nowPlaying: data.nowPlaying
+      nowPlaying: data.nowPlaying,
+      history: data.history || []
     };
     if (data.user) {
       session = updateSession(partyId, {
@@ -253,6 +296,7 @@ async function refreshState() {
     renderPartyInfo();
     renderSessionDetails();
     renderComposer();
+    renderNowPlaying();
     renderQueue();
     if (!state.token) {
       setOverlay(true);
