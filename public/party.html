@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Party room • VDOjam</title>
+  <link rel="stylesheet" href="/css/party.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="overlay" id="join-overlay" hidden>
+      <div class="overlay-card">
+        <h2>Join this party</h2>
+        <p id="overlay-party-name">Enter a display name to take part.</p>
+        <form id="overlay-form" class="overlay-form">
+          <input type="text" name="displayName" placeholder="Your name" required />
+          <button type="submit" class="primary">Join party</button>
+        </form>
+        <button id="overlay-cancel" class="link-button">Return home</button>
+      </div>
+    </div>
+    <aside class="sidebar">
+      <div class="party-meta">
+        <h1 id="party-name">Party</h1>
+        <p class="party-id" id="party-id"></p>
+        <div id="access-code" class="access" hidden></div>
+        <div class="share">
+          <h2>Invite friends</h2>
+          <p id="share-link"></p>
+          <img id="share-qr" alt="Party QR code" hidden />
+        </div>
+        <div class="session" id="session-details" hidden></div>
+        <button id="logout" class="secondary">Log out</button>
+      </div>
+    </aside>
+    <main class="content">
+      <section class="composer card" id="composer" hidden>
+        <h2>Drop a YouTube link</h2>
+        <p>You can queue up to <strong id="remaining-count">3</strong> songs at a time.</p>
+        <form id="video-form" class="composer-form">
+          <input type="url" name="url" placeholder="https://youtu.be/" required />
+          <button type="submit" class="primary">Add to queue</button>
+        </form>
+        <p class="hint">Tip: paste any YouTube link. We'll fetch the title automatically.</p>
+      </section>
+
+      <section class="queue card">
+        <div class="queue-header">
+          <h2>Up next</h2>
+          <div id="admin-controls" class="admin-controls" hidden>
+            <a id="open-player" class="secondary" target="_blank" rel="noopener">Open player</a>
+          </div>
+        </div>
+        <div id="queue-list" class="queue-list">
+          <p class="muted">Loading queue…</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <template id="track-template">
+    <article class="track">
+      <img class="thumb" alt="Thumbnail" />
+      <div class="track-body">
+        <header>
+          <h3 class="title"></h3>
+          <p class="meta"></p>
+        </header>
+        <div class="actions">
+          <div class="vote" data-vote="1">▲</div>
+          <div class="score"></div>
+          <div class="vote" data-vote="-1">▼</div>
+        </div>
+      </div>
+      <footer class="track-footer">
+        <span class="submitted"></span>
+        <div class="track-buttons"></div>
+      </footer>
+    </article>
+  </template>
+  <script type="module" src="/js/party.js"></script>
+</body>
+</html>

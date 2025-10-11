@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player • VDOjam</title>
+  <link rel="stylesheet" href="/css/player.css" />
+</head>
+<body>
+  <main class="player">
+    <section class="panel">
+      <h1 id="party-title">VDOjam player</h1>
+      <form id="access-form" class="access-form">
+        <div class="field">
+          <label>Party ID</label>
+          <input type="text" name="partyId" placeholder="pty_xxxxx" required />
+        </div>
+        <div class="field">
+          <label>Access code</label>
+          <input type="text" name="accessCode" placeholder="admin code" required />
+        </div>
+        <button type="submit" class="primary">Unlock player</button>
+      </form>
+      <div id="status" class="status muted">Waiting for credentials…</div>
+      <div id="track-info" class="track-info" hidden>
+        <h2 id="track-title"></h2>
+        <p id="track-meta" class="muted"></p>
+        <div class="controls">
+          <button id="skip" class="secondary">Skip</button>
+          <button id="reset" class="link">Reset queue</button>
+        </div>
+      </div>
+      <section class="upcoming" hidden>
+        <h3>Coming up</h3>
+        <ol id="upcoming-list"></ol>
+      </section>
+    </section>
+    <div class="screen">
+      <div id="player"></div>
+    </div>
+  </main>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script type="module" src="/js/player.js"></script>
+</body>
+</html>

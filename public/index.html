@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VDOjam • Party video queue</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1>VDOjam</h1>
+      <p>Spin up a shared YouTube queue for your party in seconds.</p>
+    </header>
+
+    <section class="card" id="create-card">
+      <h2>Create a new party</h2>
+      <p>Pick a name for your party and your display name. You will become the party admin.</p>
+      <form id="create-form" class="form-grid">
+        <label>
+          Party name
+          <input type="text" name="partyName" placeholder="Game night" required />
+        </label>
+        <label>
+          Your name
+          <input type="text" name="displayName" placeholder="Alex" required />
+        </label>
+        <button type="submit" class="primary">Create party</button>
+      </form>
+      <div class="callout" id="create-result" hidden></div>
+    </section>
+
+    <section class="card" id="join-card">
+      <h2>Join an existing party</h2>
+      <p>Ask the host for the party link or code, then choose a display name.</p>
+      <form id="join-form" class="form-grid">
+        <label>
+          Party ID
+          <input type="text" name="partyId" placeholder="pty_xxxxx" required />
+        </label>
+        <label>
+          Your name
+          <input type="text" name="displayName" placeholder="Jordan" required />
+        </label>
+        <button type="submit" class="secondary">Join party</button>
+      </form>
+      <div class="callout" id="join-result" hidden></div>
+    </section>
+
+    <section class="card" id="recent-card" hidden>
+      <h2>Jump back in</h2>
+      <p>Pick a party you have joined on this device.</p>
+      <ul id="recent-list" class="recent-list"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="/js/index.js"></script>
+</body>
+</html>

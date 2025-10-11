@@ -1,0 +1,14 @@
+{
+  "name": "vdojam",
+  "version": "0.1.0",
+  "description": "Self-hosted video jamming party web app",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "keywords": ["video", "party", "youtube", "queue"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
