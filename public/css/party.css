@@ -36,6 +36,10 @@ body {
   z-index: 20;
 }
 
+.overlay[hidden] {
+  display: none !important;
+}
+
 .overlay-card {
   background: var(--surface-strong);
   border: 1px solid rgba(148, 163, 184, 0.2);
