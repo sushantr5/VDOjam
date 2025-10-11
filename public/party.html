@@ -35,6 +35,18 @@
     </aside>
     <main class="content">
       <section id="party-status" class="card party-status" hidden></section>
+      <section class="card now-playing" id="now-playing" hidden>
+        <h2>Now playing</h2>
+        <div class="now-playing-track" id="now-playing-track" hidden>
+          <img id="now-playing-thumb" class="now-playing-thumb" alt="Now playing thumbnail" />
+          <div class="now-playing-details">
+            <h3 id="now-playing-title"></h3>
+            <p class="meta" id="now-playing-meta"></p>
+            <p class="submitted" id="now-playing-submitted"></p>
+          </div>
+        </div>
+        <p class="muted" id="now-playing-empty">Queue is waiting for its first track.</p>
+      </section>
       <section class="composer card" id="composer" hidden>
         <h2>Drop a YouTube link</h2>
         <p>You can queue up to <strong id="remaining-count">3</strong> songs at a time.</p>

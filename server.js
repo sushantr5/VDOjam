@@ -226,12 +226,41 @@ function sortQueue(submissions) {
   });
 }
 
+function resolvePlaybackState(party) {
+  const queue = sortQueue(party.submissions || []);
+  let changed = false;
+  let current = null;
+
+  if (party.currentSubmissionId) {
+    current = queue.find(item => item.id === party.currentSubmissionId);
+    if (!current || current.played) {
+      party.currentSubmissionId = null;
+      current = null;
+      changed = true;
+    }
+  }
+
+  if (!current) {
+    current = queue.find(item => !item.played);
+    if (current && party.currentSubmissionId !== current.id) {
+      party.currentSubmissionId = current.id;
+      changed = true;
+    }
+  }
+
+  const upcoming = queue.filter(item => !item.played && (!current || item.id !== current.id));
+  const history = queue.filter(item => item.played);
+
+  return { queue, current, upcoming, history, changed };
+}
+
 function isPartyEnded(party) {
   return !!party.endedAt;
 }
 
 function finalizeParty(party, endedAt = new Date().toISOString()) {
   party.endedAt = endedAt;
+  party.currentSubmissionId = null;
   party.history = party.history || [];
   const knownHistory = new Set(party.history);
   for (const submission of party.submissions || []) {
@@ -344,11 +373,14 @@ async function handleApi(req, res, url) {
       methodNotAllowed(res);
       return;
     }
-    const queue = sortQueue(party.submissions || []);
+    const playback = resolvePlaybackState(party);
+    if (playback.changed) {
+      await saveDb(db);
+    }
     const viewerId = viewer ? viewer.id : null;
-    const submissions = queue.map(item => summarizeSubmission(item, viewerId));
+    const submissions = playback.upcoming.map(item => summarizeSubmission(item, viewerId));
     const remainingUploads = viewerId
-      ? Math.max(0, 3 - queue.filter(item => !item.played && item.userId === viewerId).length)
+      ? Math.max(0, 3 - playback.queue.filter(item => !item.played && item.userId === viewerId).length)
       : null;
     const response = {
       party: {
@@ -359,8 +391,8 @@ async function handleApi(req, res, url) {
         endedAt: party.endedAt || null
       },
       submissions,
-      nowPlaying: submissions.find(item => !item.played) || null,
-      history: sortQueue(party.submissions || []).filter(item => item.played).map(item => summarizeSubmission(item, viewerId))
+      nowPlaying: playback.current ? summarizeSubmission(playback.current, viewerId) : null,
+      history: playback.history.map(item => summarizeSubmission(item, viewerId))
     };
     if (viewer) {
       response.user = { id: viewer.id, name: viewer.name, role: viewer.role };
@@ -519,6 +551,12 @@ async function handleApi(req, res, url) {
           return;
         }
         party.submissions = party.submissions.filter(item => item.id !== submissionId);
+        if (party.currentSubmissionId === submissionId) {
+          party.currentSubmissionId = null;
+        }
+        if (Array.isArray(party.history)) {
+          party.history = party.history.filter(id => id !== submissionId);
+        }
         await saveDb(db);
         sendJson(res, 200, { success: true });
         return;
@@ -542,6 +580,10 @@ async function handleApi(req, res, url) {
       const value = Number(body.value);
       if (![ -1, 0, 1 ].includes(value)) {
         sendJson(res, 400, { error: 'Vote value must be -1, 0, or 1.' });
+        return;
+      }
+      if (party.currentSubmissionId === submission.id && !submission.played) {
+        sendJson(res, 409, { error: 'The track currently playing cannot be voted on.' });
         return;
       }
       submission.votes = submission.votes || {};
@@ -573,6 +615,9 @@ async function handleApi(req, res, url) {
       }
       submission.played = true;
       submission.playedAt = new Date().toISOString();
+      if (party.currentSubmissionId === submission.id) {
+        party.currentSubmissionId = null;
+      }
       party.history = party.history || [];
       if (!party.history.includes(submission.id)) {
         party.history.push(submission.id);
@@ -622,13 +667,15 @@ async function handleApi(req, res, url) {
       sendJson(res, 403, { error: 'Invalid access code.' });
       return;
     }
-    const queue = sortQueue(party.submissions || []);
-    const submissions = queue.map(item => summarizeSubmission(item));
+    const playback = resolvePlaybackState(party);
+    if (playback.changed) {
+      await saveDb(db);
+    }
     const response = {
       party: { id: party.id, name: party.name, endedAt: party.endedAt || null },
-      nowPlaying: submissions.find(item => !item.played) || null,
-      upcoming: submissions.filter(item => !item.played).slice(1),
-      history: submissions.filter(item => item.played),
+      nowPlaying: playback.current ? summarizeSubmission(playback.current) : null,
+      upcoming: playback.upcoming.map(item => summarizeSubmission(item)),
+      history: playback.history.map(item => summarizeSubmission(item)),
       canGoPrevious: !isPartyEnded(party) && (party.history || []).length > 0
     };
     if (isPartyEnded(party)) {
@@ -662,8 +709,15 @@ async function handleApi(req, res, url) {
       sendJson(res, 404, { error: 'Track not found.' });
       return;
     }
+    if (party.currentSubmissionId && party.currentSubmissionId !== submission.id) {
+      sendJson(res, 409, { error: 'This track is not currently playing.' });
+      return;
+    }
     submission.played = true;
     submission.playedAt = new Date().toISOString();
+    if (party.currentSubmissionId === submission.id) {
+      party.currentSubmissionId = null;
+    }
     party.history = party.history || [];
     if (!party.history.includes(submission.id)) {
       party.history.push(submission.id);
@@ -704,6 +758,7 @@ async function handleApi(req, res, url) {
     submission.played = false;
     submission.playedAt = null;
     submission.priority = Date.now();
+    party.currentSubmissionId = submission.id;
     await saveDb(db);
     sendJson(res, 200, { submission: summarizeSubmission(submission) });
     return;
@@ -729,6 +784,7 @@ async function handleApi(req, res, url) {
       submission.played = false;
       submission.priority = 0;
     }
+    party.currentSubmissionId = null;
     party.history = [];
     await saveDb(db);
     sendJson(res, 200, { success: true });
