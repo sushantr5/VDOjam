@@ -26,6 +26,7 @@ const state = {
   partyId: params.get('partyId'),
   accessCode: params.get('accessCode'),
   nowPlaying: null,
+  playerVideoId: null,
   isUnlocked: false,
   canGoPrevious: false,
   isPaused: false,
@@ -175,6 +176,7 @@ function renderUpcoming(list) {
 function updateTrack(track) {
   if (!track) {
     state.nowPlaying = null;
+    state.playerVideoId = null;
     elements.trackTitle.textContent = 'No track playing';
     elements.trackMeta.textContent = '';
     setPaused(true);
@@ -184,13 +186,15 @@ function updateTrack(track) {
     return;
   }
   const isNewTrack = !state.nowPlaying || state.nowPlaying.id !== track.id;
+  const needsLoad = isNewTrack || state.playerVideoId !== track.videoId;
   state.nowPlaying = track;
   elements.trackTitle.textContent = track.title;
   elements.trackMeta.textContent = `by ${track.channel} • submitted by ${track.submittedBy}`;
-  if (player && isNewTrack) {
+  if (player && needsLoad) {
     player.loadVideoById(track.videoId);
+    state.playerVideoId = track.videoId;
   }
-  if (isNewTrack) {
+  if (needsLoad) {
     setPaused(false);
   }
 }
