@@ -258,6 +258,15 @@ function isPartyEnded(party) {
   return !!party.endedAt;
 }
 
+function ensurePlayerState(party) {
+  if (!party.playerState) {
+    party.playerState = { isPaused: false, updatedAt: null };
+  }
+  if (!Array.isArray(party.playerCommands)) {
+    party.playerCommands = [];
+  }
+}
+
 function finalizeParty(party, endedAt = new Date().toISOString()) {
   party.endedAt = endedAt;
   party.currentSubmissionId = null;
@@ -328,7 +337,9 @@ async function handleApi(req, res, url) {
         [authToken]: userId
       },
       submissions: [],
-      history: []
+      history: [],
+      playerState: { isPaused: false, updatedAt: createdAt },
+      playerCommands: []
     };
 
     await saveDb(db);
@@ -374,6 +385,7 @@ async function handleApi(req, res, url) {
       return;
     }
     const playback = resolvePlaybackState(party);
+    ensurePlayerState(party);
     if (playback.changed) {
       await saveDb(db);
     }
@@ -399,6 +411,10 @@ async function handleApi(req, res, url) {
       response.remainingUploads = remainingUploads;
       if (viewer.role === 'admin') {
         response.party.accessCode = party.accessCode;
+        response.playerState = {
+          isPaused: !!party.playerState?.isPaused,
+          updatedAt: party.playerState?.updatedAt || null
+        };
       }
     }
     sendJson(res, 200, response);
@@ -654,6 +670,51 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (restPath === '/player/control' && req.method === 'POST') {
+    let body;
+    try {
+      body = await parseBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message });
+      return;
+    }
+    const action = (body.action || '').trim().toLowerCase();
+    const allowedActions = new Set(['restart', 'pause', 'play']);
+    const accessCode = (body.accessCode || '').trim();
+    let authorized = false;
+    if (viewer && viewer.role === 'admin') {
+      authorized = true;
+    }
+    if (accessCode && accessCode === party.accessCode) {
+      authorized = true;
+    }
+    if (!authorized) {
+      sendJson(res, 403, { error: 'Admin privileges required.' });
+      return;
+    }
+    if (!allowedActions.has(action)) {
+      sendJson(res, 400, { error: 'Unsupported player action.' });
+      return;
+    }
+    if (isPartyEnded(party)) {
+      sendJson(res, 409, { error: 'This party has already ended.' });
+      return;
+    }
+    ensurePlayerState(party);
+    const command = {
+      id: generateId('cmd'),
+      action,
+      createdAt: new Date().toISOString()
+    };
+    party.playerCommands.push(command);
+    if (party.playerCommands.length > 20) {
+      party.playerCommands = party.playerCommands.slice(-20);
+    }
+    await saveDb(db);
+    sendJson(res, 200, { command });
+    return;
+  }
+
   if (restPath === '/player/state' && req.method === 'POST') {
     let body;
     try {
@@ -667,8 +728,35 @@ async function handleApi(req, res, url) {
       sendJson(res, 403, { error: 'Invalid access code.' });
       return;
     }
+    ensurePlayerState(party);
     const playback = resolvePlaybackState(party);
-    if (playback.changed) {
+    let shouldSave = playback.changed;
+    const acks = Array.isArray(body.acks) ? body.acks.filter(id => typeof id === 'string') : [];
+    if (acks.length) {
+      const ackSet = new Set(acks);
+      const before = party.playerCommands.length;
+      party.playerCommands = party.playerCommands.filter(cmd => !ackSet.has(cmd.id));
+      if (party.playerCommands.length !== before) {
+        shouldSave = true;
+      }
+    }
+    if (body.playerState && typeof body.playerState.isPaused === 'boolean') {
+      const previous = !!party.playerState.isPaused;
+      const nextValue = !!body.playerState.isPaused;
+      if (previous !== nextValue) {
+        shouldSave = true;
+      }
+      party.playerState = {
+        ...party.playerState,
+        isPaused: nextValue,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    if (isPartyEnded(party) && party.playerCommands.length) {
+      party.playerCommands = [];
+      shouldSave = true;
+    }
+    if (shouldSave) {
       await saveDb(db);
     }
     const response = {
@@ -676,11 +764,21 @@ async function handleApi(req, res, url) {
       nowPlaying: playback.current ? summarizeSubmission(playback.current) : null,
       upcoming: playback.upcoming.map(item => summarizeSubmission(item)),
       history: playback.history.map(item => summarizeSubmission(item)),
-      canGoPrevious: !isPartyEnded(party) && (party.history || []).length > 0
+      canGoPrevious: !isPartyEnded(party) && (party.history || []).length > 0,
+      playerState: {
+        isPaused: !!party.playerState.isPaused,
+        updatedAt: party.playerState.updatedAt
+      },
+      commands: party.playerCommands.map(cmd => ({
+        id: cmd.id,
+        action: cmd.action,
+        createdAt: cmd.createdAt
+      }))
     };
     if (isPartyEnded(party)) {
       response.nowPlaying = null;
       response.upcoming = [];
+      response.commands = [];
     }
     sendJson(res, 200, response);
     return;

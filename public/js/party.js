@@ -24,6 +24,10 @@ const elements = {
   adminControls: document.getElementById('admin-controls'),
   openPlayer: document.getElementById('open-player'),
   endParty: document.getElementById('end-party'),
+  adminPrevious: document.getElementById('admin-previous'),
+  adminRestart: document.getElementById('admin-restart'),
+  adminPlayPause: document.getElementById('admin-play-pause'),
+  adminNext: document.getElementById('admin-next'),
   sessionDetails: document.getElementById('session-details'),
   logout: document.getElementById('logout'),
   overlay: document.getElementById('join-overlay'),
@@ -51,7 +55,8 @@ let state = {
   submissions: [],
   remainingUploads: null,
   nowPlaying: null,
-  history: []
+  history: [],
+  playerState: { isPaused: false }
 };
 
 function setOverlay(visible) {
@@ -169,8 +174,30 @@ function renderPartyInfo() {
     elements.accessCode.hidden = true;
     elements.adminControls.hidden = true;
   }
+  renderAdminControls();
   updateOverlayContent();
   renderPartyStatus();
+}
+
+function renderAdminControls() {
+  const isAdmin = state.user?.role === 'admin';
+  const partyEnded = !!state.party?.endedAt;
+  const hasTrack = !!state.nowPlaying;
+  const historyCount = Array.isArray(state.history) ? state.history.length : 0;
+  if (elements.adminPrevious) {
+    elements.adminPrevious.disabled = !isAdmin || partyEnded || historyCount === 0;
+  }
+  if (elements.adminRestart) {
+    elements.adminRestart.disabled = !isAdmin || partyEnded || !hasTrack;
+  }
+  if (elements.adminNext) {
+    elements.adminNext.disabled = !isAdmin || partyEnded || !hasTrack;
+  }
+  if (elements.adminPlayPause) {
+    elements.adminPlayPause.disabled = !isAdmin || partyEnded || !hasTrack;
+    const isPaused = !!state.playerState?.isPaused;
+    elements.adminPlayPause.textContent = isPaused ? 'Play' : 'Pause';
+  }
 }
 
 function renderComposer() {
@@ -281,7 +308,8 @@ async function refreshState() {
       submissions: data.submissions,
       remainingUploads: data.remainingUploads ?? state.remainingUploads,
       nowPlaying: data.nowPlaying,
-      history: data.history || []
+      history: data.history || [],
+      playerState: data.playerState || state.playerState
     };
     if (data.user) {
       session = updateSession(partyId, {
@@ -298,6 +326,7 @@ async function refreshState() {
     renderComposer();
     renderNowPlaying();
     renderQueue();
+    renderAdminControls();
     if (!state.token) {
       setOverlay(true);
     } else {
@@ -379,6 +408,73 @@ async function markPlayedTrack(trackId) {
     await refreshState();
   } catch (error) {
     console.error(error);
+  }
+}
+
+async function sendPlayerControl(action) {
+  if (!state.token || state.user?.role !== 'admin') return false;
+  if (state.party?.endedAt) return false;
+  try {
+    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/player/control`, {
+      method: 'POST',
+      token: state.token,
+      body: { action }
+    });
+    return true;
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+    return false;
+  }
+}
+
+async function goToPreviousTrack() {
+  if (!state.party?.accessCode || state.party?.endedAt) return;
+  try {
+    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/player/previous`, {
+      method: 'POST',
+      body: { accessCode: state.party.accessCode }
+    });
+    await refreshState();
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  }
+}
+
+async function goToNextTrack() {
+  if (!state.party?.accessCode || state.party?.endedAt || !state.nowPlaying) return;
+  try {
+    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/player/advance`, {
+      method: 'POST',
+      body: {
+        accessCode: state.party.accessCode,
+        submissionId: state.nowPlaying.id
+      }
+    });
+    await refreshState();
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  }
+}
+
+async function restartPlayerTrack() {
+  if (!state.nowPlaying || state.party?.endedAt) return;
+  const result = await sendPlayerControl('restart');
+  if (result) {
+    state.playerState = { ...state.playerState, isPaused: false };
+    renderAdminControls();
+  }
+}
+
+async function togglePlayerPlayback() {
+  if (!state.nowPlaying || state.party?.endedAt) return;
+  const targetAction = state.playerState?.isPaused ? 'play' : 'pause';
+  const result = await sendPlayerControl(targetAction);
+  if (result) {
+    state.playerState = { ...state.playerState, isPaused: targetAction === 'pause' };
+    renderAdminControls();
   }
 }
 
@@ -479,6 +575,22 @@ elements.overlayForm?.addEventListener('submit', async (event) => {
 
 elements.overlayCancel?.addEventListener('click', () => {
   window.location.href = '/';
+});
+
+elements.adminPrevious?.addEventListener('click', () => {
+  goToPreviousTrack();
+});
+
+elements.adminNext?.addEventListener('click', () => {
+  goToNextTrack();
+});
+
+elements.adminRestart?.addEventListener('click', () => {
+  restartPlayerTrack();
+});
+
+elements.adminPlayPause?.addEventListener('click', () => {
+  togglePlayerPlayback();
 });
 
 refreshState();
