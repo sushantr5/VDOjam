@@ -261,6 +261,12 @@ button:disabled {
   gap: 0.5rem;
 }
 
+.admin-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .admin-controls a,
 .admin-controls button {
   display: inline-flex;

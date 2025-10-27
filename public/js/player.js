@@ -29,7 +29,9 @@ const state = {
   isUnlocked: false,
   canGoPrevious: false,
   isPaused: false,
-  endedAt: null
+  endedAt: null,
+  pendingAcks: [],
+  handledCommands: new Set()
 };
 
 if (state.partyId) {
@@ -101,6 +103,8 @@ function handleEndedParty(data) {
   if (player) {
     player.stopVideo();
   }
+  state.pendingAcks = [];
+  state.handledCommands.clear();
   updateControlsAvailability();
 }
 
@@ -108,10 +112,19 @@ async function pollState() {
   if (!state.partyId || !state.accessCode) return;
   clearPollTimer();
   try {
+    const acksToSend = state.pendingAcks.length ? [...state.pendingAcks] : [];
     const data = await apiRequest(`/api/parties/${encodeURIComponent(state.partyId)}/player/state`, {
       method: 'POST',
-      body: { accessCode: state.accessCode }
+      body: {
+        accessCode: state.accessCode,
+        acks: acksToSend,
+        playerState: { isPaused: state.isPaused }
+      }
     });
+    if (acksToSend.length) {
+      state.pendingAcks = state.pendingAcks.filter((id) => !acksToSend.includes(id));
+      acksToSend.forEach((id) => state.handledCommands.delete(id));
+    }
     state.isUnlocked = true;
     state.endedAt = data.party.endedAt || null;
     state.canGoPrevious = Boolean(data.canGoPrevious);
@@ -127,6 +140,9 @@ async function pollState() {
     updateTrack(data.nowPlaying);
     renderUpcoming(data.upcoming || []);
     updateControlsAvailability();
+    if (Array.isArray(data.commands)) {
+      processCommands(data.commands);
+    }
     ensurePoll();
   } catch (error) {
     console.error(error);
@@ -179,6 +195,52 @@ function updateTrack(track) {
   }
 }
 
+function processCommands(commands) {
+  commands.forEach((command) => {
+    if (!command || !command.id || state.handledCommands.has(command.id)) {
+      return;
+    }
+    const executed = executeCommand(command);
+    if (executed) {
+      state.handledCommands.add(command.id);
+      if (!state.pendingAcks.includes(command.id)) {
+        state.pendingAcks.push(command.id);
+      }
+    }
+  });
+}
+
+function executeCommand(command) {
+  if (state.endedAt) {
+    return true;
+  }
+  const action = command.action;
+  if (action === 'restart') {
+    if (!state.nowPlaying) {
+      return true;
+    }
+    if (!player) {
+      return false;
+    }
+    return restartTrack();
+  }
+  if (action === 'pause') {
+    if (!player) {
+      return false;
+    }
+    player.pauseVideo();
+    return true;
+  }
+  if (action === 'play') {
+    if (!player) {
+      return false;
+    }
+    player.playVideo();
+    return true;
+  }
+  return true;
+}
+
 async function advanceTrack() {
   if (!state.nowPlaying || state.endedAt) return;
   try {
@@ -211,11 +273,12 @@ async function goToPrevious() {
 }
 
 function restartTrack() {
-  if (!player || !state.nowPlaying || state.endedAt) return;
+  if (!player || !state.nowPlaying || state.endedAt) return false;
   player.seekTo(0, true);
   player.playVideo();
   setPaused(false);
   updateControlsAvailability();
+  return true;
 }
 
 function togglePlayback() {
