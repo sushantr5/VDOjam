@@ -1,0 +1,10 @@
+.git
+.github
+data
+test
+node_modules
+*.md
+.gitignore
+.dockerignore
+docker-compose.yml
+render.yaml

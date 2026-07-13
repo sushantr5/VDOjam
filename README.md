@@ -81,6 +81,31 @@ Other environment variables: `PORT` (default `3000`), `HOST` (default `0.0.0.0`)
 | `/api/parties/:id/player/previous` | POST | Replay the previously played track. |
 | `/api/parties/:id/player/reset` | POST | Reset all tracks to unplayed. |
 
-## Deployment
+## Production deployment
 
-VDOjam runs wherever Node.js 18+ is available. Copy the repository to your server or container and launch with `npm start`. Persist the `data/` directory (or point `DATA_DIR` at a mounted volume) to keep party state across restarts. The server honours `x-forwarded-proto`, so it works behind a reverse proxy.
+Every push to `main` runs CI (`.github/workflows/ci.yml`): syntax checks, unit tests, and a boot smoke test that creates a real party over HTTP.
+
+### Option A — Render (recommended, automatic)
+
+The repo ships a [Render Blueprint](https://render.com/docs/infrastructure-as-code) (`render.yaml`) with a health check, a persistent 1 GB disk for party data, and `autoDeploy` enabled.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sushantr5/VDOjam)
+
+One-time setup, then production deploys itself on every push to `main`:
+
+1. Click the button above (or Render Dashboard → **New → Blueprint** → select this repo).
+2. Optionally set `LLM_API_KEY` in the service's environment to enable LLM classification.
+
+That's it — Render builds the Docker image, health-checks `/api/health`, and swaps traffic with zero downtime on every push. (Alternatively, disable autoDeploy and add the service's deploy hook URL as a `RENDER_DEPLOY_HOOK_URL` GitHub secret; the CI workflow will then trigger the deploy only after tests pass.)
+
+### Option B — Docker on any VPS
+
+```bash
+docker compose up -d --build
+```
+
+The included `Dockerfile` (Node 22 Alpine, non-root user, container health check) and `docker-compose.yml` persist party data in a named volume mounted at `/data`. Put a reverse proxy (Caddy, nginx, Traefik) in front for TLS — the server honours `x-forwarded-proto`.
+
+### Option C — Bare Node.js
+
+VDOjam has zero dependencies, so `npm start` works anywhere Node 18+ is available. Point `DATA_DIR` at a persistent path and run it under systemd or pm2.

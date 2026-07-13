@@ -1,0 +1,28 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One-time setup: Render Dashboard -> New -> Blueprint -> select this repo.
+# After that every push to the connected branch deploys to production
+# automatically (health-checked, zero-downtime).
+#
+# The persistent disk keeps party data across deploys and restarts.
+# Set LLM_API_KEY in the Render dashboard to enable LLM song classification;
+# leave it empty to use the built-in heuristic classifier.
+
+services:
+  - type: web
+    name: vdojam
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: vdojam-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gpt-4o-mini
