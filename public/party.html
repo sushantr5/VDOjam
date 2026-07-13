@@ -3,23 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Party room • VDOjam</title>
+  <title>Party room — VDOjam</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/party.css" />
 </head>
 <body>
   <div class="page">
     <div class="overlay" id="join-overlay" hidden>
       <div class="overlay-card">
+        <img class="brand-mark overlay-logo" src="/img/logo.svg" alt="VDOjam" />
         <h2>Join this party</h2>
-        <p id="overlay-party-name">Enter a display name to take part.</p>
+        <p id="overlay-party-name" class="muted">Enter a display name to take part.</p>
         <form id="overlay-form" class="overlay-form">
-          <input type="text" name="displayName" placeholder="Your name" required />
+          <input type="text" name="displayName" placeholder="Your name" maxlength="60" required />
           <button type="submit" class="primary">Join party</button>
         </form>
         <button id="overlay-cancel" class="link-button">Return home</button>
       </div>
     </div>
+
     <aside class="sidebar">
+      <a class="brand" href="/">
+        <img class="brand-mark" src="/img/logo.svg" alt="" />
+        <span>VDOjam</span>
+      </a>
       <div class="party-meta">
         <h1 id="party-name">Party</h1>
         <p class="party-id" id="party-id"></p>
@@ -27,47 +38,81 @@
         <div class="share">
           <h2>Invite friends</h2>
           <p id="share-link"></p>
+          <button id="copy-link" class="ghost" hidden>Copy link</button>
           <img id="share-qr" alt="Party QR code" hidden />
         </div>
         <div class="session" id="session-details" hidden></div>
-        <button id="logout" class="secondary">Log out</button>
+        <button id="logout" class="secondary sidebar-logout" hidden>Leave party</button>
       </div>
     </aside>
+
     <main class="content">
       <section id="party-status" class="card party-status" hidden></section>
+
+      <section class="card mix-meter" id="mix-meter" hidden>
+        <div class="mix-header">
+          <h2>The mix</h2>
+          <span id="ai-badge" class="chip ai" title="Songs are classified when added and the player alternates between buckets.">AI mix</span>
+        </div>
+        <p class="muted mix-explainer">Every song lands in a bucket. Playback alternates: one Indian, one Western — best-ranked first.</p>
+        <div class="mix-buckets">
+          <div class="bucket-stat indian" id="bucket-indian">
+            <span class="bucket-name">Indian</span>
+            <span class="bucket-count" id="bucket-indian-count">0</span>
+            <span class="bucket-sub">in queue</span>
+          </div>
+          <div class="mix-arrow" id="mix-next" title="Which bucket plays next">⇄</div>
+          <div class="bucket-stat western" id="bucket-western">
+            <span class="bucket-name">Western</span>
+            <span class="bucket-count" id="bucket-western-count">0</span>
+            <span class="bucket-sub">in queue</span>
+          </div>
+        </div>
+        <div class="mix-bar" id="mix-bar" aria-hidden="true">
+          <div class="mix-bar-indian" id="mix-bar-indian"></div>
+        </div>
+      </section>
+
       <section class="card now-playing" id="now-playing" hidden>
-        <h2>Now playing</h2>
+        <div class="section-title">
+          <h2>Now playing</h2>
+          <span class="chip now" id="now-playing-chip" hidden>Live</span>
+        </div>
         <div class="now-playing-track" id="now-playing-track" hidden>
           <img id="now-playing-thumb" class="now-playing-thumb" alt="Now playing thumbnail" />
           <div class="now-playing-details">
+            <div class="now-playing-badges" id="now-playing-badges"></div>
             <h3 id="now-playing-title"></h3>
             <p class="meta" id="now-playing-meta"></p>
-            <p class="submitted" id="now-playing-submitted"></p>
+            <p class="submitted muted" id="now-playing-submitted"></p>
           </div>
         </div>
         <p class="muted" id="now-playing-empty">Queue is waiting for its first track.</p>
       </section>
+
       <section class="composer card" id="composer" hidden>
-        <h2>Drop a YouTube link</h2>
-        <p>You can queue up to <strong id="remaining-count">3</strong> songs at a time.</p>
+        <h2>Add a song</h2>
+        <p class="muted">Paste any YouTube link. AI detects whether it's Indian or Western and files it into the right bucket. You can queue up to <strong id="remaining-count">3</strong> songs at a time.</p>
         <form id="video-form" class="composer-form">
-          <input type="url" name="url" placeholder="https://youtu.be/" required />
-          <button type="submit" class="primary">Add to queue</button>
+          <input type="url" name="url" placeholder="https://youtu.be/…" required />
+          <button type="submit" class="primary" id="composer-button">Add to queue</button>
         </form>
-        <p class="hint">Tip: paste any YouTube link. We'll fetch the title automatically.</p>
       </section>
 
       <section class="queue card">
         <div class="queue-header">
-          <h2>Up next</h2>
+          <div class="section-title">
+            <h2>Up next</h2>
+            <span class="muted queue-note">alternating Indian ⇄ Western</span>
+          </div>
           <div id="admin-controls" class="admin-controls" hidden>
             <div class="admin-control-group">
-              <button id="admin-previous" class="secondary">Previous</button>
-              <button id="admin-restart" class="secondary">Restart</button>
-              <button id="admin-play-pause" class="secondary">Pause</button>
-              <button id="admin-next" class="secondary">Next</button>
+              <button id="admin-previous" class="ghost" title="Play previous track">⏮ Prev</button>
+              <button id="admin-restart" class="ghost" title="Restart current track">↺ Restart</button>
+              <button id="admin-play-pause" class="ghost">Pause</button>
+              <button id="admin-next" class="ghost" title="Skip to next track">Next ⏭</button>
             </div>
-            <a id="open-player" class="secondary" target="_blank" rel="noopener">Open player</a>
+            <a id="open-player" class="btn secondary" target="_blank" rel="noopener">Open player</a>
             <button id="end-party" class="danger">End party</button>
           </div>
         </div>
@@ -75,20 +120,30 @@
           <p class="muted">Loading queue…</p>
         </div>
       </section>
+
+      <section class="card history-card" id="history-card" hidden>
+        <details>
+          <summary><h2>Played earlier</h2><span class="muted" id="history-count"></span></summary>
+          <div id="history-list" class="history-list"></div>
+        </details>
+      </section>
     </main>
   </div>
+
   <template id="track-template">
     <article class="track">
-      <img class="thumb" alt="Thumbnail" />
+      <div class="track-order" aria-hidden="true"></div>
+      <img class="thumb" alt="Thumbnail" loading="lazy" />
       <div class="track-body">
         <header>
+          <div class="track-badges"></div>
           <h3 class="title"></h3>
           <p class="meta"></p>
         </header>
         <div class="actions">
-          <div class="vote" data-vote="1">▲</div>
+          <button class="vote" data-vote="1" aria-label="Upvote">▲</button>
           <div class="score"></div>
-          <div class="vote" data-vote="-1">▼</div>
+          <button class="vote" data-vote="-1" aria-label="Downvote">▼</button>
         </div>
       </div>
       <footer class="track-footer">
@@ -97,6 +152,7 @@
       </footer>
     </article>
   </template>
+
   <script type="module" src="/js/party.js"></script>
 </body>
 </html>

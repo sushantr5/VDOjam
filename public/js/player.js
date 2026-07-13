@@ -1,4 +1,5 @@
 import { apiRequest } from './api.js';
+import { categoryChip } from './ui.js';
 
 let player;
 let pollTimer = null;
@@ -8,16 +9,21 @@ const elements = {
   form: document.getElementById('access-form'),
   status: document.getElementById('status'),
   trackInfo: document.getElementById('track-info'),
+  trackBadges: document.getElementById('track-badges'),
   trackTitle: document.getElementById('track-title'),
   trackMeta: document.getElementById('track-meta'),
   upcomingList: document.getElementById('upcoming-list'),
   upcomingSection: document.querySelector('.upcoming'),
+  mixStrip: document.getElementById('mix-strip'),
+  mixIndianCount: document.getElementById('mix-indian-count'),
+  mixWesternCount: document.getElementById('mix-western-count'),
   previous: document.getElementById('previous'),
   restart: document.getElementById('restart'),
   playPause: document.getElementById('play-pause'),
   skip: document.getElementById('skip'),
   reset: document.getElementById('reset'),
-  partyTitle: document.getElementById('party-title')
+  partyTitle: document.getElementById('party-title'),
+  screenIdle: document.getElementById('screen-idle')
 };
 
 const params = new URLSearchParams(window.location.search);
@@ -47,6 +53,10 @@ function setStatus(message, variant = 'muted') {
   elements.status.className = `status ${variant}`;
 }
 
+function setIdleScreen(visible) {
+  elements.screenIdle.hidden = !visible;
+}
+
 function clearPollTimer() {
   if (pollTimer) {
     clearTimeout(pollTimer);
@@ -61,28 +71,26 @@ function ensurePoll() {
 
 function setPaused(paused) {
   state.isPaused = paused;
-  if (elements.playPause) {
-    elements.playPause.textContent = paused ? 'Play' : 'Pause';
-  }
+  elements.playPause.textContent = paused ? '▶ Play' : '⏸ Pause';
 }
 
 function updateControlsAvailability() {
   const hasTrack = !!state.nowPlaying;
-  if (elements.previous) {
-    elements.previous.disabled = !state.canGoPrevious || !!state.endedAt;
+  elements.previous.disabled = !state.canGoPrevious || !!state.endedAt;
+  elements.restart.disabled = !hasTrack || !!state.endedAt;
+  elements.playPause.disabled = !hasTrack || !!state.endedAt;
+  elements.skip.disabled = !hasTrack || !!state.endedAt;
+  elements.reset.disabled = !state.isUnlocked || !!state.endedAt;
+}
+
+function renderMixStrip(buckets) {
+  if (!buckets) {
+    elements.mixStrip.hidden = true;
+    return;
   }
-  if (elements.restart) {
-    elements.restart.disabled = !hasTrack || !!state.endedAt;
-  }
-  if (elements.playPause) {
-    elements.playPause.disabled = !hasTrack || !!state.endedAt;
-  }
-  if (elements.skip) {
-    elements.skip.disabled = !hasTrack || !!state.endedAt;
-  }
-  if (elements.reset) {
-    elements.reset.disabled = !state.isUnlocked || !!state.endedAt;
-  }
+  elements.mixStrip.hidden = false;
+  elements.mixIndianCount.textContent = buckets.indian ?? 0;
+  elements.mixWesternCount.textContent = buckets.western ?? 0;
 }
 
 function handleEndedParty(data) {
@@ -95,12 +103,15 @@ function handleEndedParty(data) {
   elements.form.hidden = true;
   elements.trackInfo.hidden = false;
   elements.upcomingSection.hidden = true;
+  elements.mixStrip.hidden = true;
+  elements.trackBadges.innerHTML = '';
   elements.trackTitle.textContent = 'Party ended';
   elements.trackMeta.textContent = state.endedAt
     ? `This party wrapped at ${new Date(state.endedAt).toLocaleString()}.`
     : '';
   elements.upcomingList.innerHTML = '';
   setStatus('Party has ended.', 'muted');
+  setIdleScreen(true);
   if (player) {
     player.stopVideo();
   }
@@ -131,13 +142,15 @@ async function pollState() {
     state.canGoPrevious = Boolean(data.canGoPrevious);
     elements.form.hidden = true;
     elements.trackInfo.hidden = false;
-    elements.partyTitle.textContent = `${data.party.name} • Player`;
+    elements.partyTitle.textContent = data.party.name;
+    document.title = `${data.party.name} — VDOjam Player`;
     if (state.endedAt) {
       handleEndedParty(data);
       return;
     }
     elements.upcomingSection.hidden = false;
-    setStatus(data.nowPlaying ? 'Streaming live queue' : 'Waiting for new tracks…', 'success');
+    renderMixStrip(data.buckets);
+    setStatus(data.nowPlaying ? 'Streaming the live mix' : 'Waiting for new tracks…', 'success');
     updateTrack(data.nowPlaying);
     renderUpcoming(data.upcoming || []);
     updateControlsAvailability();
@@ -154,7 +167,11 @@ async function pollState() {
     elements.form.hidden = false;
     elements.trackInfo.hidden = true;
     elements.upcomingSection.hidden = true;
+    elements.mixStrip.hidden = true;
     updateControlsAvailability();
+    if (error.status !== 403 && error.status !== 404) {
+      ensurePoll();
+    }
   }
 }
 
@@ -162,13 +179,17 @@ function renderUpcoming(list) {
   elements.upcomingList.innerHTML = '';
   if (!list.length) {
     const li = document.createElement('li');
-    li.textContent = 'Queue is empty.';
+    li.textContent = 'Queue is empty — ask guests to add songs.';
     elements.upcomingList.appendChild(li);
     return;
   }
-  list.forEach((item) => {
+  list.slice(0, 8).forEach((item) => {
     const li = document.createElement('li');
-    li.textContent = `${item.title} — submitted by ${item.submittedBy}`;
+    li.dataset.category = item.category;
+    const title = document.createElement('span');
+    title.className = 'up-title';
+    title.textContent = `${item.title} — ${item.submittedBy}`;
+    li.append(title, categoryChip(item));
     elements.upcomingList.appendChild(li);
   });
 }
@@ -177,9 +198,11 @@ function updateTrack(track) {
   if (!track) {
     state.nowPlaying = null;
     state.playerVideoId = null;
+    elements.trackBadges.innerHTML = '';
     elements.trackTitle.textContent = 'No track playing';
     elements.trackMeta.textContent = '';
     setPaused(true);
+    setIdleScreen(true);
     if (player) {
       player.stopVideo();
     }
@@ -188,8 +211,11 @@ function updateTrack(track) {
   const isNewTrack = !state.nowPlaying || state.nowPlaying.id !== track.id;
   const needsLoad = isNewTrack || state.playerVideoId !== track.videoId;
   state.nowPlaying = track;
+  elements.trackBadges.innerHTML = '';
+  elements.trackBadges.appendChild(categoryChip(track));
   elements.trackTitle.textContent = track.title;
-  elements.trackMeta.textContent = `by ${track.channel} • submitted by ${track.submittedBy}`;
+  elements.trackMeta.textContent = `by ${track.channel} · added by ${track.submittedBy}`;
+  setIdleScreen(false);
   if (player && needsLoad) {
     player.loadVideoById(track.videoId);
     state.playerVideoId = track.videoId;
@@ -229,16 +255,12 @@ function executeCommand(command) {
     return restartTrack();
   }
   if (action === 'pause') {
-    if (!player) {
-      return false;
-    }
+    if (!player) return false;
     player.pauseVideo();
     return true;
   }
   if (action === 'play') {
-    if (!player) {
-      return false;
-    }
+    if (!player) return false;
     player.playVideo();
     return true;
   }
@@ -259,6 +281,7 @@ async function advanceTrack() {
   } catch (error) {
     console.error(error);
     setStatus(error.message, 'error');
+    ensurePoll();
   }
 }
 
@@ -318,30 +341,17 @@ elements.form.addEventListener('submit', (event) => {
   pollState();
 });
 
-elements.previous?.addEventListener('click', () => {
-  goToPrevious();
-});
-
-elements.restart?.addEventListener('click', () => {
-  restartTrack();
-});
-
-elements.playPause?.addEventListener('click', () => {
-  togglePlayback();
-});
-
-elements.skip.addEventListener('click', () => {
-  advanceTrack();
-});
-
-elements.reset?.addEventListener('click', () => {
-  resetQueue();
-});
+elements.previous.addEventListener('click', goToPrevious);
+elements.restart.addEventListener('click', restartTrack);
+elements.playPause.addEventListener('click', togglePlayback);
+elements.skip.addEventListener('click', advanceTrack);
+elements.reset.addEventListener('click', resetQueue);
 
 function onYouTubeIframeAPIReady() {
   player = new YT.Player('player', {
     height: '390',
     width: '640',
+    playerVars: { rel: 0 },
     events: {
       onReady: () => {
         if (state.partyId && state.accessCode) {
@@ -360,6 +370,12 @@ function onYouTubeIframeAPIReady() {
           setPaused(false);
           updateControlsAvailability();
         }
+      },
+      onError: () => {
+        // Unplayable/embedded-restricted video: skip after a short pause so
+        // the party is not stuck on a dead track.
+        setStatus('Video cannot be played here — skipping…', 'error');
+        setTimeout(() => advanceTrack(), 2500);
       }
     }
   });
@@ -368,3 +384,4 @@ function onYouTubeIframeAPIReady() {
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
 updateControlsAvailability();
+setIdleScreen(true);

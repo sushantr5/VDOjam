@@ -3,55 +3,92 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VDOjam • Party video queue</title>
+  <title>VDOjam — AI-mixed party queue for Indian &amp; Western music</title>
+  <meta name="description" content="Host a collaborative YouTube party queue. AI sorts every song into Indian and Western buckets and the player alternates between them so everyone hears their music." />
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
   <main class="container">
     <header class="hero">
-      <h1>VDOjam</h1>
-      <p>Spin up a shared YouTube queue for your party in seconds.</p>
+      <a class="brand hero-brand" href="/">
+        <img class="brand-mark" src="/img/logo.svg" alt="" />
+        <span>VDOjam</span>
+      </a>
+      <h1>One party. Two vibes.<br /><span class="gradient-text">Perfectly mixed.</span></h1>
+      <p class="hero-sub">
+        Build a collaborative YouTube queue with your guests. AI files every song into an
+        <span class="chip indian">Indian</span> or <span class="chip western">Western</span> bucket,
+        and the player alternates between them — ranked by your crowd's votes — so nobody's music gets buried.
+      </p>
+      <div class="hero-features">
+        <div class="feature">
+          <span class="feature-icon" aria-hidden="true">🎛️</span>
+          <h3>Smart two-bucket mixing</h3>
+          <p>Songs are classified as Indian or Western the moment they're added. Playback alternates one from each bucket, top-ranked first.</p>
+        </div>
+        <div class="feature">
+          <span class="feature-icon" aria-hidden="true">🗳️</span>
+          <h3>Crowd-ranked queue</h3>
+          <p>Guests join with a link or QR code and vote songs up or down. The best tracks in each bucket rise to the top.</p>
+        </div>
+        <div class="feature">
+          <span class="feature-icon" aria-hidden="true">📺</span>
+          <h3>Big-screen player</h3>
+          <p>A dedicated, code-protected player page auto-advances through the mix. Perfect for a TV or projector.</p>
+        </div>
+      </div>
     </header>
 
-    <section class="card" id="create-card">
-      <h2>Create a new party</h2>
-      <p>Pick a name for your party and your display name. You will become the party admin.</p>
-      <form id="create-form" class="form-grid">
-        <label>
-          Party name
-          <input type="text" name="partyName" placeholder="Game night" required />
-        </label>
-        <label>
-          Your name
-          <input type="text" name="displayName" placeholder="Alex" required />
-        </label>
-        <button type="submit" class="primary">Create party</button>
-      </form>
-      <div class="callout" id="create-result" hidden></div>
-    </section>
+    <div class="panels">
+      <section class="card" id="create-card">
+        <h2>Host a new party</h2>
+        <p>Name your party and yourself — you'll be the admin with full queue control.</p>
+        <form id="create-form" class="form-grid">
+          <label>
+            Party name
+            <input type="text" name="partyName" placeholder="Saturday house party" maxlength="60" required />
+          </label>
+          <label>
+            Your name
+            <input type="text" name="displayName" placeholder="Alex" maxlength="60" required />
+          </label>
+          <button type="submit" class="primary">Create party</button>
+        </form>
+        <div class="callout" id="create-result" hidden></div>
+      </section>
 
-    <section class="card" id="join-card">
-      <h2>Join an existing party</h2>
-      <p>Ask the host for the party link or code, then choose a display name.</p>
-      <form id="join-form" class="form-grid">
-        <label>
-          Party ID
-          <input type="text" name="partyId" placeholder="pty_xxxxx" required />
-        </label>
-        <label>
-          Your name
-          <input type="text" name="displayName" placeholder="Jordan" required />
-        </label>
-        <button type="submit" class="secondary">Join party</button>
-      </form>
-      <div class="callout" id="join-result" hidden></div>
-    </section>
+      <section class="card" id="join-card">
+        <h2>Join an existing party</h2>
+        <p>Ask the host for the party link or ID, then pick a display name.</p>
+        <form id="join-form" class="form-grid">
+          <label>
+            Party ID
+            <input type="text" name="partyId" placeholder="pty_xxxxx" required />
+          </label>
+          <label>
+            Your name
+            <input type="text" name="displayName" placeholder="Jordan" maxlength="60" required />
+          </label>
+          <button type="submit" class="secondary">Join party</button>
+        </form>
+        <div class="callout" id="join-result" hidden></div>
+      </section>
+    </div>
 
     <section class="card" id="recent-card" hidden>
       <h2>Jump back in</h2>
-      <p>Pick a party you have joined on this device.</p>
+      <p>Parties you've joined on this device.</p>
       <ul id="recent-list" class="recent-list"></ul>
     </section>
+
+    <footer class="footer">
+      <p class="faint">VDOjam · self-hosted collaborative party queue · AI-assisted Indian ↔ Western rotation</p>
+    </footer>
   </main>
 
   <script type="module" src="/js/index.js"></script>

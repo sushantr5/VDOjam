@@ -1,5 +1,6 @@
 import { apiRequest } from './api.js';
 import { loadSessions, updateSession, deleteSession } from './storage.js';
+import { showToast, categoryChip, categoryLabel, formatTime } from './ui.js';
 
 const params = new URLSearchParams(window.location.search);
 const partyId = params.get('partyId');
@@ -16,9 +17,11 @@ const elements = {
   partyId: document.getElementById('party-id'),
   accessCode: document.getElementById('access-code'),
   shareLink: document.getElementById('share-link'),
+  copyLink: document.getElementById('copy-link'),
   shareQr: document.getElementById('share-qr'),
   queueList: document.getElementById('queue-list'),
   composer: document.getElementById('composer'),
+  composerButton: document.getElementById('composer-button'),
   remainingCount: document.getElementById('remaining-count'),
   videoForm: document.getElementById('video-form'),
   adminControls: document.getElementById('admin-controls'),
@@ -36,13 +39,26 @@ const elements = {
   overlayCancel: document.getElementById('overlay-cancel'),
   overlayPartyName: document.getElementById('overlay-party-name'),
   partyStatus: document.getElementById('party-status'),
+  mixMeter: document.getElementById('mix-meter'),
+  aiBadge: document.getElementById('ai-badge'),
+  bucketIndian: document.getElementById('bucket-indian'),
+  bucketWestern: document.getElementById('bucket-western'),
+  bucketIndianCount: document.getElementById('bucket-indian-count'),
+  bucketWesternCount: document.getElementById('bucket-western-count'),
+  mixBarIndian: document.getElementById('mix-bar-indian'),
+  mixNext: document.getElementById('mix-next'),
   nowPlayingCard: document.getElementById('now-playing'),
+  nowPlayingChip: document.getElementById('now-playing-chip'),
   nowPlayingTrack: document.getElementById('now-playing-track'),
   nowPlayingThumb: document.getElementById('now-playing-thumb'),
+  nowPlayingBadges: document.getElementById('now-playing-badges'),
   nowPlayingTitle: document.getElementById('now-playing-title'),
   nowPlayingMeta: document.getElementById('now-playing-meta'),
   nowPlayingSubmitted: document.getElementById('now-playing-submitted'),
   nowPlayingEmpty: document.getElementById('now-playing-empty'),
+  historyCard: document.getElementById('history-card'),
+  historyList: document.getElementById('history-list'),
+  historyCount: document.getElementById('history-count'),
   trackTemplate: document.getElementById('track-template')
 };
 
@@ -56,6 +72,8 @@ let state = {
   remainingUploads: null,
   nowPlaying: null,
   history: [],
+  buckets: null,
+  aiEnabled: false,
   playerState: { isPaused: false }
 };
 
@@ -66,44 +84,55 @@ function setOverlay(visible) {
 function updateOverlayContent() {
   if (!state.party) return;
   if (state.party.endedAt) {
-    if (elements.overlayTitle) {
-      elements.overlayTitle.textContent = 'Party ended';
-    }
+    elements.overlayTitle.textContent = 'Party ended';
     elements.overlayPartyName.textContent = `“${state.party.name}” has wrapped up. Thanks for jamming!`;
     elements.overlayForm.hidden = true;
-    elements.overlayCancel.textContent = 'Return home';
   } else {
-    if (elements.overlayTitle) {
-      elements.overlayTitle.textContent = 'Join this party';
-    }
-    elements.overlayPartyName.textContent = `Join "${state.party.name}" with a display name.`;
+    elements.overlayTitle.textContent = 'Join this party';
+    elements.overlayPartyName.textContent = `Join “${state.party.name}” with a display name.`;
     elements.overlayForm.hidden = false;
-    elements.overlayCancel.textContent = 'Return home';
   }
 }
 
 function renderPartyStatus() {
-  if (!elements.partyStatus) return;
-  if (!state.party) {
+  if (!state.party || !state.party.endedAt) {
     elements.partyStatus.hidden = true;
     elements.partyStatus.removeAttribute('data-state');
     elements.partyStatus.textContent = '';
     return;
   }
-  if (state.party.endedAt) {
-    const ended = new Date(state.party.endedAt).toLocaleString();
-    elements.partyStatus.hidden = false;
-    elements.partyStatus.dataset.state = 'ended';
-    elements.partyStatus.innerHTML = `<strong>Party ended</strong><p class="muted">This party wrapped at ${ended}. Thanks for jamming with us!</p>`;
-  } else {
-    elements.partyStatus.hidden = true;
-    elements.partyStatus.removeAttribute('data-state');
-    elements.partyStatus.textContent = '';
+  const ended = new Date(state.party.endedAt).toLocaleString();
+  elements.partyStatus.hidden = false;
+  elements.partyStatus.dataset.state = 'ended';
+  elements.partyStatus.innerHTML = `<strong>Party ended</strong><p class="muted">This party wrapped at ${ended}. Thanks for jamming with us!</p>`;
+}
+
+function renderMixMeter() {
+  if (!state.buckets || state.party?.endedAt) {
+    elements.mixMeter.hidden = true;
+    return;
   }
+  elements.mixMeter.hidden = false;
+  const indian = state.buckets.indian || 0;
+  const western = state.buckets.western || 0;
+  elements.bucketIndianCount.textContent = indian;
+  elements.bucketWesternCount.textContent = western;
+  const total = indian + western;
+  elements.mixBarIndian.style.width = total ? `${Math.round((indian / total) * 100)}%` : '50%';
+
+  elements.aiBadge.textContent = state.aiEnabled ? 'AI mix' : 'Auto mix';
+  elements.aiBadge.title = state.aiEnabled
+    ? 'Songs are classified by an LLM when added; the player alternates between buckets.'
+    : 'Songs are auto-detected by keyword and script analysis; the player alternates between buckets.';
+
+  const nextCategory = state.nowPlaying
+    ? (state.nowPlaying.category === 'indian' ? 'western' : 'indian')
+    : state.buckets.nextCategory;
+  elements.bucketIndian.classList.toggle('up-next', nextCategory === 'indian' && indian > 0);
+  elements.bucketWestern.classList.toggle('up-next', nextCategory === 'western' && western > 0);
 }
 
 function renderNowPlaying() {
-  if (!elements.nowPlayingCard) return;
   if (!state.party || state.party.endedAt) {
     elements.nowPlayingCard.hidden = true;
     return;
@@ -111,22 +140,25 @@ function renderNowPlaying() {
   elements.nowPlayingCard.hidden = false;
   if (!state.nowPlaying) {
     elements.nowPlayingTrack.hidden = true;
+    elements.nowPlayingChip.hidden = true;
     elements.nowPlayingEmpty.hidden = false;
-    if (state.submissions.length) {
-      elements.nowPlayingEmpty.textContent = 'Waiting for the next track to begin.';
-    } else {
-      elements.nowPlayingEmpty.textContent = 'Queue is waiting for its first track.';
-    }
-    elements.nowPlayingThumb?.removeAttribute('src');
+    elements.nowPlayingEmpty.textContent = state.submissions.length
+      ? 'Waiting for the next track to begin.'
+      : 'Queue is waiting for its first track.';
+    elements.nowPlayingThumb.removeAttribute('src');
+    elements.nowPlayingBadges.innerHTML = '';
     elements.nowPlayingTitle.textContent = '';
     elements.nowPlayingMeta.textContent = '';
     elements.nowPlayingSubmitted.textContent = '';
     return;
   }
   elements.nowPlayingTrack.hidden = false;
+  elements.nowPlayingChip.hidden = false;
   elements.nowPlayingEmpty.hidden = true;
   elements.nowPlayingThumb.src = state.nowPlaying.thumbnail;
   elements.nowPlayingThumb.alt = `Thumbnail for ${state.nowPlaying.title}`;
+  elements.nowPlayingBadges.innerHTML = '';
+  elements.nowPlayingBadges.appendChild(categoryChip(state.nowPlaying));
   elements.nowPlayingTitle.textContent = state.nowPlaying.title;
   elements.nowPlayingMeta.textContent = `by ${state.nowPlaying.channel}`;
   elements.nowPlayingSubmitted.textContent = formatSubmittedText(state.nowPlaying);
@@ -142,23 +174,28 @@ function ensureRefreshTimer() {
 function renderSessionDetails() {
   if (!state.user) {
     elements.sessionDetails.hidden = true;
-    if (elements.logout) {
-      elements.logout.hidden = true;
-    }
+    elements.logout.hidden = true;
     return;
   }
   elements.sessionDetails.hidden = false;
-  elements.sessionDetails.innerHTML = `Logged in as <strong>${state.user.name}</strong> (${state.user.role})`;
-  if (elements.logout) {
-    elements.logout.hidden = false;
-  }
+  elements.sessionDetails.innerHTML = '';
+  const strong = document.createElement('strong');
+  strong.textContent = state.user.name;
+  elements.sessionDetails.append('Signed in as ', strong, ` · ${state.user.role}`);
+  elements.logout.hidden = false;
 }
 
 function renderPartyInfo() {
   if (!state.party) return;
+  document.title = `${state.party.name} — VDOjam`;
   elements.partyName.textContent = state.party.name;
   elements.partyId.textContent = partyId;
-  elements.shareLink.innerHTML = `<a href="${state.party.joinUrl}">${state.party.joinUrl}</a>`;
+  elements.shareLink.innerHTML = '';
+  const link = document.createElement('a');
+  link.href = state.party.joinUrl;
+  link.textContent = state.party.joinUrl;
+  elements.shareLink.appendChild(link);
+  elements.copyLink.hidden = false;
   elements.shareQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(state.party.joinUrl)}`;
   elements.shareQr.hidden = false;
   if (state.user?.role === 'admin' && state.party.accessCode) {
@@ -166,10 +203,8 @@ function renderPartyInfo() {
     elements.accessCode.hidden = false;
     elements.adminControls.hidden = false;
     elements.openPlayer.href = `/player.html?partyId=${encodeURIComponent(partyId)}&accessCode=${encodeURIComponent(state.party.accessCode)}`;
-    if (elements.endParty) {
-      elements.endParty.disabled = !!state.party.endedAt;
-      elements.endParty.textContent = state.party.endedAt ? 'Party ended' : 'End party';
-    }
+    elements.endParty.disabled = !!state.party.endedAt;
+    elements.endParty.textContent = state.party.endedAt ? 'Party ended' : 'End party';
   } else {
     elements.accessCode.hidden = true;
     elements.adminControls.hidden = true;
@@ -184,20 +219,11 @@ function renderAdminControls() {
   const partyEnded = !!state.party?.endedAt;
   const hasTrack = !!state.nowPlaying;
   const historyCount = Array.isArray(state.history) ? state.history.length : 0;
-  if (elements.adminPrevious) {
-    elements.adminPrevious.disabled = !isAdmin || partyEnded || historyCount === 0;
-  }
-  if (elements.adminRestart) {
-    elements.adminRestart.disabled = !isAdmin || partyEnded || !hasTrack;
-  }
-  if (elements.adminNext) {
-    elements.adminNext.disabled = !isAdmin || partyEnded || !hasTrack;
-  }
-  if (elements.adminPlayPause) {
-    elements.adminPlayPause.disabled = !isAdmin || partyEnded || !hasTrack;
-    const isPaused = !!state.playerState?.isPaused;
-    elements.adminPlayPause.textContent = isPaused ? 'Play' : 'Pause';
-  }
+  elements.adminPrevious.disabled = !isAdmin || partyEnded || historyCount === 0;
+  elements.adminRestart.disabled = !isAdmin || partyEnded || !hasTrack;
+  elements.adminNext.disabled = !isAdmin || partyEnded || !hasTrack;
+  elements.adminPlayPause.disabled = !isAdmin || partyEnded || !hasTrack;
+  elements.adminPlayPause.textContent = state.playerState?.isPaused ? '▶ Play' : '⏸ Pause';
 }
 
 function renderComposer() {
@@ -209,13 +235,11 @@ function renderComposer() {
   if (typeof state.remainingUploads === 'number') {
     elements.remainingCount.textContent = state.remainingUploads;
   }
-  elements.videoForm.querySelector('button').disabled = state.remainingUploads === 0;
+  elements.composerButton.disabled = state.remainingUploads === 0;
 }
 
 function formatSubmittedText(track) {
-  const submitted = new Date(track.submittedAt);
-  const formatted = submitted.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `Submitted by ${track.submittedBy} • ${formatted}`;
+  return `Added by ${track.submittedBy} · ${formatTime(track.submittedAt)}`;
 }
 
 function renderQueue() {
@@ -235,25 +259,29 @@ function renderQueue() {
     elements.queueList.appendChild(empty);
     return;
   }
-  upcoming.forEach((track) => {
+  upcoming.forEach((track, index) => {
     const node = elements.trackTemplate.content.firstElementChild.cloneNode(true);
+    node.dataset.category = track.category;
+    node.querySelector('.track-order').textContent = index + 1;
     node.querySelector('.thumb').src = track.thumbnail;
     node.querySelector('.title').textContent = track.title;
     node.querySelector('.meta').textContent = `by ${track.channel}`;
     node.querySelector('.submitted').textContent = formatSubmittedText(track);
     node.querySelector('.score').textContent = track.score;
-    if (track.played) {
-      node.classList.add('played');
+
+    const badges = node.querySelector('.track-badges');
+    badges.appendChild(categoryChip(track));
+    if (track.priority > 0) {
+      const boost = document.createElement('span');
+      boost.className = 'chip';
+      boost.textContent = 'Boosted';
+      boost.title = 'An admin promoted this track to play next in its bucket.';
+      badges.appendChild(boost);
     }
-    if (state.nowPlaying && state.nowPlaying.id === track.id && !track.played) {
-      const badge = document.createElement('span');
-      badge.className = 'badge';
-      badge.textContent = 'Now playing';
-      node.querySelector('header').appendChild(badge);
-    }
+
     node.querySelectorAll('.vote').forEach((voteBtn) => {
       const value = Number(voteBtn.dataset.vote);
-      const votingDisabled = partyEnded || (state.nowPlaying && state.nowPlaying.id === track.id && !track.played);
+      const votingDisabled = partyEnded || !state.user;
       if (votingDisabled) {
         voteBtn.dataset.disabled = 'true';
         voteBtn.removeAttribute('data-state');
@@ -275,13 +303,22 @@ function renderQueue() {
     if (!partyEnded) {
       if (state.user?.role === 'admin') {
         const promote = document.createElement('button');
-        promote.textContent = 'Play next';
+        promote.textContent = '⚡ Play next';
+        promote.title = 'Boost this track to the top of its bucket.';
         promote.addEventListener('click', () => promoteTrack(track.id));
         buttons.appendChild(promote);
-        const markPlayed = document.createElement('button');
-        markPlayed.textContent = 'Mark played';
-        markPlayed.addEventListener('click', () => markPlayedTrack(track.id));
-        buttons.appendChild(markPlayed);
+
+        const recategorize = document.createElement('button');
+        const target = track.category === 'indian' ? 'western' : 'indian';
+        recategorize.textContent = `→ ${categoryLabel(target)} bucket`;
+        recategorize.title = 'Move this song to the other bucket if the AI got it wrong.';
+        recategorize.addEventListener('click', () => setCategory(track.id, target));
+        buttons.appendChild(recategorize);
+
+        const markPlayedBtn = document.createElement('button');
+        markPlayedBtn.textContent = 'Mark played';
+        markPlayedBtn.addEventListener('click', () => markPlayedTrack(track.id));
+        buttons.appendChild(markPlayedBtn);
       }
       if (state.user && (state.user.role === 'admin' || state.user.id === track.submittedById)) {
         const remove = document.createElement('button');
@@ -293,6 +330,29 @@ function renderQueue() {
     }
 
     elements.queueList.appendChild(node);
+  });
+}
+
+function renderHistory() {
+  const history = state.history || [];
+  if (!history.length) {
+    elements.historyCard.hidden = true;
+    return;
+  }
+  elements.historyCard.hidden = false;
+  elements.historyCount.textContent = `${history.length} track${history.length === 1 ? '' : 's'}`;
+  elements.historyList.innerHTML = '';
+  history.forEach((track) => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const img = document.createElement('img');
+    img.src = track.thumbnail;
+    img.alt = '';
+    img.loading = 'lazy';
+    const title = document.createElement('span');
+    title.textContent = `${track.title} — ${track.submittedBy}`;
+    item.append(img, title, categoryChip(track));
+    elements.historyList.appendChild(item);
   });
 }
 
@@ -309,6 +369,8 @@ async function refreshState() {
       remainingUploads: data.remainingUploads ?? state.remainingUploads,
       nowPlaying: data.nowPlaying,
       history: data.history || [],
+      buckets: data.buckets || null,
+      aiEnabled: !!data.aiEnabled,
       playerState: data.playerState || state.playerState
     };
     if (data.user) {
@@ -324,14 +386,12 @@ async function refreshState() {
     renderPartyInfo();
     renderSessionDetails();
     renderComposer();
+    renderMixMeter();
     renderNowPlaying();
     renderQueue();
+    renderHistory();
     renderAdminControls();
-    if (!state.token) {
-      setOverlay(true);
-    } else {
-      setOverlay(false);
-    }
+    setOverlay(!state.token);
     if (state.party?.endedAt) {
       if (refreshTimer) {
         clearTimeout(refreshTimer);
@@ -352,6 +412,10 @@ async function refreshState() {
       renderComposer();
       renderSessionDetails();
       setOverlay(true);
+    } else if (error.status === 404) {
+      showToast('Party not found. It may have been removed.', 'error');
+    } else {
+      ensureRefreshTimer();
     }
   }
 }
@@ -370,6 +434,22 @@ async function handleVote(trackId, value) {
     await refreshState();
   } catch (error) {
     console.error(error);
+    showToast(error.message, 'error');
+  }
+}
+
+async function setCategory(trackId, category) {
+  try {
+    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/videos/${encodeURIComponent(trackId)}/category`, {
+      method: 'POST',
+      token: state.token,
+      body: { category }
+    });
+    showToast(`Moved to the ${categoryLabel(category)} bucket.`, 'success');
+    await refreshState();
+  } catch (error) {
+    console.error(error);
+    showToast(error.message, 'error');
   }
 }
 
@@ -381,9 +461,11 @@ async function removeTrack(trackId) {
       method: 'DELETE',
       token: state.token
     });
+    showToast('Track removed.', 'success');
     await refreshState();
   } catch (error) {
     console.error(error);
+    showToast(error.message, 'error');
   }
 }
 
@@ -393,9 +475,11 @@ async function promoteTrack(trackId) {
       method: 'POST',
       token: state.token
     });
+    showToast('Boosted — it will play next when its bucket comes up.', 'success');
     await refreshState();
   } catch (error) {
     console.error(error);
+    showToast(error.message, 'error');
   }
 }
 
@@ -408,6 +492,7 @@ async function markPlayedTrack(trackId) {
     await refreshState();
   } catch (error) {
     console.error(error);
+    showToast(error.message, 'error');
   }
 }
 
@@ -423,7 +508,7 @@ async function sendPlayerControl(action) {
     return true;
   } catch (error) {
     console.error(error);
-    alert(error.message);
+    showToast(error.message, 'error');
     return false;
   }
 }
@@ -438,7 +523,7 @@ async function goToPreviousTrack() {
     await refreshState();
   } catch (error) {
     console.error(error);
-    alert(error.message);
+    showToast(error.message, 'error');
   }
 }
 
@@ -455,7 +540,7 @@ async function goToNextTrack() {
     await refreshState();
   } catch (error) {
     console.error(error);
-    alert(error.message);
+    showToast(error.message, 'error');
   }
 }
 
@@ -479,12 +564,10 @@ async function togglePlayerPlayback() {
 }
 
 async function endCurrentParty() {
-  if (!state.token || !state.user || state.user.role !== 'admin') return;
+  if (!state.token || state.user?.role !== 'admin') return;
   if (state.party?.endedAt) return;
   if (!confirm('End this party? Guests will no longer be able to join and the queue will be locked.')) return;
-  if (elements.endParty) {
-    elements.endParty.disabled = true;
-  }
+  elements.endParty.disabled = true;
   try {
     await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/end`, {
       method: 'POST',
@@ -498,12 +581,20 @@ async function endCurrentParty() {
     window.location.href = '/';
   } catch (error) {
     console.error(error);
-    alert(error.message);
-    if (elements.endParty) {
-      elements.endParty.disabled = false;
-    }
+    showToast(error.message, 'error');
+    elements.endParty.disabled = false;
   }
 }
+
+elements.copyLink?.addEventListener('click', async () => {
+  if (!state.party?.joinUrl) return;
+  try {
+    await navigator.clipboard.writeText(state.party.joinUrl);
+    showToast('Invite link copied to clipboard.', 'success');
+  } catch (error) {
+    showToast('Could not copy the link automatically — copy it manually.', 'error');
+  }
+});
 
 elements.videoForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -512,26 +603,28 @@ elements.videoForm?.addEventListener('submit', async (event) => {
     return;
   }
   const formData = Object.fromEntries(new FormData(elements.videoForm));
-  elements.videoForm.querySelector('button').disabled = true;
+  elements.composerButton.disabled = true;
+  elements.composerButton.innerHTML = '<span class="spin"></span> Classifying…';
   try {
-    await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/videos`, {
+    const result = await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/videos`, {
       method: 'POST',
       token: state.token,
       body: formData
     });
     elements.videoForm.reset();
+    const track = result.submission;
+    showToast(`Added "${track.title}" to the ${categoryLabel(track.category)} bucket.`, 'success');
     await refreshState();
   } catch (error) {
     console.error(error);
-    alert(error.message);
+    showToast(error.message, 'error');
   } finally {
-    elements.videoForm.querySelector('button').disabled = false;
+    elements.composerButton.disabled = false;
+    elements.composerButton.textContent = 'Add to queue';
   }
 });
 
-elements.endParty?.addEventListener('click', () => {
-  endCurrentParty();
-});
+elements.endParty?.addEventListener('click', endCurrentParty);
 
 elements.logout?.addEventListener('click', () => {
   if (session) {
@@ -543,7 +636,7 @@ elements.logout?.addEventListener('click', () => {
 elements.overlayForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (state.party?.endedAt) {
-    alert('This party has already ended.');
+    showToast('This party has already ended.', 'error');
     return;
   }
   const value = elements.overlayForm.displayName.value.trim();
@@ -564,10 +657,11 @@ elements.overlayForm?.addEventListener('submit', async (event) => {
       updatedAt: Date.now()
     });
     setOverlay(false);
+    showToast(`Welcome to the party, ${result.user.name}!`, 'success');
     await refreshState();
   } catch (error) {
     console.error(error);
-    alert(error.message);
+    showToast(error.message, 'error');
   } finally {
     elements.overlayForm.querySelector('button').disabled = false;
   }
@@ -577,20 +671,15 @@ elements.overlayCancel?.addEventListener('click', () => {
   window.location.href = '/';
 });
 
-elements.adminPrevious?.addEventListener('click', () => {
-  goToPreviousTrack();
-});
+elements.adminPrevious?.addEventListener('click', goToPreviousTrack);
+elements.adminNext?.addEventListener('click', goToNextTrack);
+elements.adminRestart?.addEventListener('click', restartPlayerTrack);
+elements.adminPlayPause?.addEventListener('click', togglePlayerPlayback);
 
-elements.adminNext?.addEventListener('click', () => {
-  goToNextTrack();
-});
-
-elements.adminRestart?.addEventListener('click', () => {
-  restartPlayerTrack();
-});
-
-elements.adminPlayPause?.addEventListener('click', () => {
-  togglePlayerPlayback();
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !state.party?.endedAt) {
+    refreshState().catch(console.error);
+  }
 });
 
 refreshState();
