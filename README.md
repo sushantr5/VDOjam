@@ -11,6 +11,7 @@ What makes it different: **every song is classified as Indian or Western when it
 - **Party hosting** — one click to create a party; the creator becomes the admin. Shareable join link and QR code for guests.
 - **Admin controls** — boost a song to the front of its bucket, move a song to the other bucket if the AI got it wrong, mark played, remove tracks, remote-control the player (previous / restart / pause / next), and end the party.
 - **Big-screen player** — a code-protected player page auto-advances through the mix, skips unplayable videos, and shows the upcoming alternating order.
+- **Second-screen mode** — from the player page, detach the video into its own window ("Send video to 2nd screen"), drag it to a TV or projector and double-click for fullscreen, while the controls and queue stay in the original window. Playback position hands off seamlessly in both directions; closing the video window brings playback back automatically.
 - **Zero dependencies** — plain Node.js backend, vanilla JS frontend, atomic JSON-file persistence. No build step, no database server.
 
 ## Getting started
@@ -56,7 +57,7 @@ Other environment variables: `PORT` (default `3000`), `HOST` (default `0.0.0.0`)
 - `lib/youtube.js` — YouTube URL parsing and oEmbed metadata (with noembed fallback).
 - `lib/db.js` — in-memory store with atomic, coalesced JSON persistence.
 - `lib/http.js` — request parsing, validation and response helpers.
-- `public/` — static frontend (HTML, CSS, ES modules); pages: landing, party room, player.
+- `public/` — static frontend (HTML, CSS, ES modules); pages: landing, party room, player, detached video screen (`screen.html`, synced to the player over a `BroadcastChannel`).
 - `test/queue.test.js` — unit tests (`node --test`).
 - `data/db.json` — JSON database created on first run.
 

@@ -51,6 +51,10 @@
           <button id="skip" class="secondary" title="Next track">⏭</button>
           <button id="reset" class="link-button">Reset queue</button>
         </div>
+        <div class="detach-row">
+          <button id="detach" class="secondary" title="Open the video in a separate window you can drag to a TV or projector">🖥 Send video to 2nd screen</button>
+          <p class="faint detach-hint">Controls and queue stay here; the video opens in its own window. Drag it to your other display and double-click for fullscreen.</p>
+        </div>
       </div>
 
       <section class="upcoming" hidden>
@@ -59,11 +63,16 @@
       </section>
     </section>
 
-    <div class="screen">
+    <div class="screen" id="screen-area">
       <div id="player"></div>
       <div class="screen-idle" id="screen-idle">
         <img src="/img/logo.svg" alt="" />
         <p>Waiting for the first track…</p>
+      </div>
+      <div class="screen-idle" id="screen-detached" hidden>
+        <img src="/img/logo.svg" alt="" />
+        <p>Video is playing on the second screen.</p>
+        <p class="faint">Close that window or press “Bring video back” to play it here again.</p>
       </div>
     </div>
   </main>

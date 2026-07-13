@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video screen — VDOjam</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/screen.css" />
+</head>
+<body>
+  <div id="player"></div>
+
+  <div class="screen-status" id="screen-status">
+    <img src="/img/logo.svg" alt="" />
+    <h1>VDOjam video screen</h1>
+    <p id="status-text" class="muted">Waiting for the player controller…</p>
+    <p class="faint">Keep the player page open in another window. Drag this window to your TV or projector, then double-click to go fullscreen.</p>
+  </div>
+
+  <div class="screen-activate" id="screen-activate" hidden>
+    <button class="primary" id="activate-button">▶ Click to start playback</button>
+    <p class="faint">Your browser requires one click before videos can play with sound in this window.</p>
+  </div>
+
+  <div class="screen-hint" id="screen-hint">Double-click for fullscreen</div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script type="module" src="/js/screen.js"></script>
+</body>
+</html>
