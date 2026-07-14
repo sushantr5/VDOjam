@@ -3,43 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Player • VDOjam</title>
+  <title>Player — VDOjam</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/player.css" />
 </head>
 <body>
   <main class="player">
     <section class="panel">
-      <h1 id="party-title">VDOjam player</h1>
+      <a class="brand" href="/">
+        <img class="brand-mark" src="/img/logo.svg" alt="" />
+        <span>VDOjam <span class="brand-tag">Player</span></span>
+      </a>
+      <h1 id="party-title">Big-screen player</h1>
+
       <form id="access-form" class="access-form">
-        <div class="field">
-          <label>Party ID</label>
+        <label>
+          Party ID
           <input type="text" name="partyId" placeholder="pty_xxxxx" required />
-        </div>
-        <div class="field">
-          <label>Access code</label>
+        </label>
+        <label>
+          Access code
           <input type="text" name="accessCode" placeholder="admin code" required />
-        </div>
+        </label>
         <button type="submit" class="primary">Unlock player</button>
       </form>
+
       <div id="status" class="status muted">Waiting for credentials…</div>
+
+      <div id="mix-strip" class="mix-strip" hidden>
+        <span class="chip indian"><span id="mix-indian-count">0</span>&nbsp;Indian</span>
+        <span class="mix-strip-sep">⇄</span>
+        <span class="chip western"><span id="mix-western-count">0</span>&nbsp;Western</span>
+      </div>
+
       <div id="track-info" class="track-info" hidden>
+        <div id="track-badges" class="track-badges"></div>
         <h2 id="track-title"></h2>
         <p id="track-meta" class="muted"></p>
         <div class="controls">
-          <button id="previous" class="secondary">Previous</button>
-          <button id="restart" class="secondary">Restart</button>
+          <button id="previous" class="secondary" title="Previous track">⏮</button>
+          <button id="restart" class="secondary" title="Restart track">↺</button>
           <button id="play-pause" class="secondary">Pause</button>
-          <button id="skip" class="secondary">Next</button>
-          <button id="reset" class="link">Reset queue</button>
+          <button id="skip" class="secondary" title="Next track">⏭</button>
+          <button id="reset" class="link-button">Reset queue</button>
+        </div>
+        <div class="detach-row">
+          <button id="detach" class="secondary" title="Open the video in a separate window you can drag to a TV or projector">🖥 Send video to 2nd screen</button>
+          <p class="faint detach-hint">Controls and queue stay here; the video opens in its own window. Drag it to your other display and double-click for fullscreen.</p>
         </div>
       </div>
+
       <section class="upcoming" hidden>
-        <h3>Coming up</h3>
+        <h3>Coming up <span class="muted upcoming-note">· alternating buckets</span></h3>
         <ol id="upcoming-list"></ol>
       </section>
     </section>
-    <div class="screen">
+
+    <div class="screen" id="screen-area">
       <div id="player"></div>
+      <div class="screen-idle" id="screen-idle">
+        <img src="/img/logo.svg" alt="" />
+        <p>Waiting for the first track…</p>
+      </div>
+      <div class="screen-idle" id="screen-detached" hidden>
+        <img src="/img/logo.svg" alt="" />
+        <p>Video is playing on the second screen.</p>
+        <p class="faint">Close that window or press “Bring video back” to play it here again.</p>
+      </div>
     </div>
   </main>
   <script src="https://www.youtube.com/iframe_api"></script>

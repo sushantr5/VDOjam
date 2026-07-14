@@ -1,0 +1,54 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        run: |
+          node --check server.js
+          for f in lib/*.js public/js/*.js; do node --check "$f"; done
+      - name: Unit tests
+        run: npm test
+      - name: Boot smoke test
+        run: |
+          DATA_DIR=/tmp/ci-data PORT=3999 node server.js &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:3999/api/health > /dev/null 2>&1; then break; fi
+            sleep 0.5
+          done
+          curl -fsS http://localhost:3999/api/health
+          curl -fsS -X POST http://localhost:3999/api/parties \
+            -H 'Content-Type: application/json' \
+            -d '{"partyName":"CI","displayName":"Bot"}' | grep -q '"authToken"'
+          kill $SERVER_PID
+
+  deploy:
+    name: Deploy to production
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -fsS "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+            echo "Production deploy triggered via deploy hook."
+          else
+            echo "RENDER_DEPLOY_HOOK_URL secret not set."
+            echo "If the repo is connected to Render as a Blueprint with autoDeploy enabled,"
+            echo "Render deploys this push automatically and no hook is needed."
+          fi

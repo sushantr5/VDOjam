@@ -1,5 +1,6 @@
 import { apiRequest } from './api.js';
 import { loadSessions, updateSession } from './storage.js';
+import { showToast } from './ui.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const createForm = document.getElementById('create-form');
@@ -24,8 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const item = document.createElement('li');
         const info = document.createElement('div');
         info.className = 'recent-info';
-        info.innerHTML = `<strong>${session.partyName || partyId}</strong><br /><span>${partyId}</span>`;
+        const name = document.createElement('strong');
+        name.textContent = session.partyName || partyId;
+        const id = document.createElement('span');
+        id.textContent = partyId;
+        info.append(name, document.createElement('br'), id);
         const button = document.createElement('button');
+        button.className = 'secondary';
         button.textContent = 'Open';
         button.addEventListener('click', () => {
           window.location.href = `/party.html?partyId=${encodeURIComponent(partyId)}`;
@@ -41,15 +47,23 @@ document.addEventListener('DOMContentLoaded', () => {
     element.className = `callout ${success ? 'success' : 'error'}`;
   }
 
+  function setBusy(form, busy) {
+    const button = form.querySelector('button');
+    button.disabled = busy;
+    if (busy) {
+      button.dataset.label = button.textContent;
+      button.innerHTML = '<span class="spin"></span> Working…';
+    } else if (button.dataset.label) {
+      button.textContent = button.dataset.label;
+    }
+  }
+
   createForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(createForm));
-    createForm.querySelector('button').disabled = true;
+    setBusy(createForm, true);
     try {
-      const result = await apiRequest('/api/parties', {
-        method: 'POST',
-        body: data
-      });
+      const result = await apiRequest('/api/parties', { method: 'POST', body: data });
       updateSession(result.party.id, {
         authToken: result.authToken,
         userId: result.user.id,
@@ -58,23 +72,24 @@ document.addEventListener('DOMContentLoaded', () => {
         partyName: result.party.name,
         updatedAt: Date.now()
       });
-      const partyUrl = `/party.html?partyId=${encodeURIComponent(result.party.id)}`;
-      window.location.href = partyUrl;
+      window.location.href = `/party.html?partyId=${encodeURIComponent(result.party.id)}`;
       return;
     } catch (error) {
       console.error(error);
       showResult(createResult, error.message, false);
+      showToast(error.message, 'error');
     } finally {
-      createForm.querySelector('button').disabled = false;
+      setBusy(createForm, false);
     }
   });
 
   joinForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(joinForm));
-    joinForm.querySelector('button').disabled = true;
+    const partyId = (data.partyId || '').trim();
+    setBusy(joinForm, true);
     try {
-      const result = await apiRequest(`/api/parties/${encodeURIComponent(data.partyId)}/join`, {
+      const result = await apiRequest(`/api/parties/${encodeURIComponent(partyId)}/join`, {
         method: 'POST',
         body: { displayName: data.displayName }
       });
@@ -86,16 +101,14 @@ document.addEventListener('DOMContentLoaded', () => {
         partyName: result.party.name,
         updatedAt: Date.now()
       });
-      showResult(
-        joinResult,
-        `You are in! Continue to the party room: <a href="/party.html?partyId=${encodeURIComponent(result.party.id)}">Open party</a>`
-      );
-      renderRecentParties();
+      window.location.href = `/party.html?partyId=${encodeURIComponent(result.party.id)}`;
+      return;
     } catch (error) {
       console.error(error);
       showResult(joinResult, error.message, false);
+      showToast(error.message, 'error');
     } finally {
-      joinForm.querySelector('button').disabled = false;
+      setBusy(joinForm, false);
     }
   });
 

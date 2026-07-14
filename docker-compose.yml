@@ -1,0 +1,22 @@
+# Self-hosted production deployment (any VPS with Docker):
+#   docker compose up -d --build
+# Party data persists in the named volume across restarts and rebuilds.
+
+services:
+  vdojam:
+    build: .
+    container_name: vdojam
+    ports:
+      - "3000:3000"
+    volumes:
+      - vdojam-data:/data
+    environment:
+      DATA_DIR: /data
+      # Uncomment to enable LLM song classification (any OpenAI-compatible API):
+      # LLM_API_KEY: sk-...
+      # LLM_API_URL: https://api.openai.com/v1/chat/completions
+      # LLM_MODEL: gpt-4o-mini
+    restart: unless-stopped
+
+volumes:
+  vdojam-data:
